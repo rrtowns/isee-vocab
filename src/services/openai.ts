@@ -1,10 +1,37 @@
 import OpenAI from 'openai';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true // Note: In production, API calls should go through a backend
-});
+// Cache for OpenAI clients
+const clientCache = new Map<string, OpenAI>();
+
+function getOpenAIClient(apiKey?: string): OpenAI {
+  const key = apiKey || import.meta.env.VITE_OPENAI_API_KEY || 'sk-placeholder';
+  
+  if (!clientCache.has(key)) {
+    clientCache.set(key, new OpenAI({
+      apiKey: key,
+      dangerouslyAllowBrowser: true // Note: In production, API calls should go through a backend
+    }));
+  }
+  
+  return clientCache.get(key)!;
+}
+
+// Debug logging helper for image generation
+const IMG_DEBUG: boolean = (import.meta.env.VITE_DEBUG_IMAGES as any) !== 'false';
+function logImage(...args: any[]) {
+  if (IMG_DEBUG) console.log('[images]', ...args);
+}
+function describeError(err: any): string {
+  try {
+    const status = (err as any)?.status ?? (err as any)?.response?.status;
+    const code = (err as any)?.code ?? (err as any)?.response?.data?.error?.code;
+    const type = (err as any)?.type ?? (err as any)?.response?.data?.error?.type;
+    const message = (err as any)?.message ?? (err as any)?.response?.data?.error?.message;
+    return `status=${status ?? 'n/a'} code=${code ?? 'n/a'} type=${type ?? 'n/a'} message=${message ?? 'n/a'}`;
+  } catch {
+    return String(err);
+  }
+}
 
 export interface FlashcardContent {
   word: string;
@@ -12,6 +39,8 @@ export interface FlashcardContent {
   examples: string[];
   synonyms: string[];
   difficulty?: string;
+  imageUrl?: string;
+  imagePrompt?: string;
 }
 
 export interface OpenAIResponse {
@@ -21,34 +50,44 @@ export interface OpenAIResponse {
   difficulty: string;
 }
 
+// Visual brief for improving image generation
+interface VisualBrief {
+  scene?: string;
+  main_subject?: string;
+  background?: string;
+  objects?: string[];
+  colors?: string[];
+  metaphor?: string;
+  style?: string;
+}
+
 /**
  * Generate flashcard content for a single word using OpenAI
  */
-export async function generateFlashcardContent(word: string): Promise<FlashcardContent> {
+export async function generateFlashcardContent(word: string, apiKey?: string): Promise<FlashcardContent> {
   const prompt = `Create educational content for the word "${word}" suitable for a 10-year-old student preparing for the ISEE exam.
 
 Please provide:
-1. A simple, clear definition (1-2 sentences, age-appropriate)
-2. Three example sentences using the word in different contexts
-3. 3-4 synonyms or similar phrases
+1. A simple, clear definition (1–2 sentences, age-appropriate)
+2. Four short, natural example sentences using the word in different contexts
+3. 6–10 synonyms or short phrases (no duplicates)
 4. Difficulty level (easy, medium, or hard)
 
-Format your response as JSON with this exact structure:
+Return JSON ONLY with this exact structure:
 {
   "definition": "simple definition here",
   "examples": [
-    "First example sentence with ${word}.",
-    "Second example sentence with ${word}.",
-    "Third example sentence with ${word}."
+    "Example sentence 1.",
+    "Example sentence 2.",
+    "Example sentence 3.",
+    "Example sentence 4."
   ],
-  "synonyms": ["synonym1", "synonym2", "synonym3", "phrase4"],
+  "synonyms": ["synonym1", "synonym2", "synonym3", "synonym4", "synonym5"],
   "difficulty": "medium"
-}
-
-Make sure the definition is simple enough for a 10-year-old to understand, and the examples show the word used naturally.`;
+}`;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAIClient(apiKey).chat.completions.create({
       model: import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini',
       messages: [
         {
@@ -60,17 +99,27 @@ Make sure the definition is simple enough for a 10-year-old to understand, and t
           content: prompt
         }
       ],
+      response_format: { type: 'json_object' },
       max_tokens: parseInt(import.meta.env.VITE_OPENAI_MAX_TOKENS) || 1500,
       temperature: 0.7,
     });
 
-    const content = completion.choices[0]?.message?.content;
+    let content = completion.choices[0]?.message?.content?.trim();
     if (!content) {
       throw new Error('No content received from OpenAI');
     }
 
-    // Parse the JSON response
-    const parsedContent: OpenAIResponse = JSON.parse(content);
+    // Clean potential code fences and parse JSON response
+    const cleaned = stripJSONFences(content);
+    let parsedContent: OpenAIResponse;
+    try {
+      parsedContent = JSON.parse(cleaned);
+    } catch (e) {
+      // Heuristic fallback: try to extract the first JSON object substring
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (!match) throw e;
+      parsedContent = JSON.parse(match[0]);
+    }
     
     return {
       word,
@@ -95,14 +144,20 @@ Make sure the definition is simple enough for a 10-year-old to understand, and t
       difficulty: 'medium'
     };
   }
-}
+} 
 
 /**
  * Generate flashcard content for multiple words in batch
  */
 export async function generateFlashcardsBatch(
   words: string[], 
-  onProgress?: (completed: number, total: number) => void
+  onProgress?: (completed: number, total: number) => void,
+  apiKey?: string,
+  opts?: {
+    generateImages?: boolean;
+    imageSize?: string;
+    onImage?: (index: number, status: 'pending' | 'success' | 'failed', url?: string) => void;
+  }
 ): Promise<FlashcardContent[]> {
   const results: FlashcardContent[] = [];
   
@@ -110,7 +165,26 @@ export async function generateFlashcardsBatch(
     const word = words[i];
     
     try {
-      const content = await generateFlashcardContent(word);
+      if (IMG_DEBUG) console.log('[cards] generating text', { index: i, word });
+      const content = await generateFlashcardContent(word, apiKey);
+      // Optionally generate an image for the word using the definition as context
+      if (opts?.generateImages) {
+        try {
+          opts?.onImage?.(i, 'pending');
+          const imageUrl = await generateIllustration(word, content.definition, { apiKey, size: opts?.imageSize });
+          if (imageUrl) {
+            content.imageUrl = imageUrl;
+            opts?.onImage?.(i, 'success', imageUrl);
+            logImage('success', { index: i, word, len: imageUrl.length });
+          } else {
+            opts?.onImage?.(i, 'failed');
+            logImage('no-url-returned', { index: i, word });
+          }
+        } catch (e) {
+          console.warn(`Image generation failed for "${word}":`, describeError(e));
+          opts?.onImage?.(i, 'failed');
+        }
+      }
       results.push(content);
       
       // Call progress callback
@@ -139,12 +213,300 @@ export async function generateFlashcardsBatch(
   return results;
 }
 
+// Utility: remove surrounding ``` or ```json fences that some models add
+function stripJSONFences(text: string): string {
+  let t = text.trim();
+  if (t.startsWith('```')) {
+    // Remove starting fence with optional language
+    t = t.replace(/^```(?:json)?\s*/i, '');
+    // Remove trailing fence
+    t = t.replace(/```\s*$/i, '');
+  }
+  return t.trim();
+}
+
+// Build a child-friendly image prompt summarizing the word meaning
+function buildImagePrompt(
+  word: string,
+  definition?: string,
+  extras?: { synonyms?: string[]; examples?: string[] }
+): string {
+  const baseMeaning = definition
+    ? `Meaning: ${definition}`
+    : `Meaning: Depict the core idea of the word.`;
+  const syn = extras?.synonyms && extras.synonyms.length
+    ? `Synonyms: ${extras.synonyms.slice(0, 8).join(', ')}.`
+    : '';
+  const ex = extras?.examples && extras.examples.length
+    ? `Context hints: ${extras.examples.slice(0, 2).join(' ')}`
+    : '';
+
+  return `Create a square, child-friendly picture-book style illustration that clearly represents the word "${word}".
+${baseMeaning}
+${syn}
+${ex}
+
+Requirements:
+- Make the meaning obvious at a glance using a concrete scene with characters/objects.
+- Absolutely no text, letters, numbers, symbols, logos, or watermarks anywhere.
+- Avoid abstract geometric patterns or random shapes; avoid grids, triangles, or kaleidoscopic motifs.
+- If the word is abstract, use a clear visual metaphor (e.g., a fish swimming against a school; one path diverging from a crowd; one odd duck among ducks).
+- Center the main subject, use a simple background, warm colors, and high contrast.
+- Keep it friendly for a 10-year-old.`;
+}
+
+// Public helper: build final prompt (including visual brief) without generating an image
+export async function createImagePrompt(
+  word: string,
+  params: { definition?: string; synonyms?: string[]; examples?: string[]; apiKey?: string }
+): Promise<string> {
+  const brief = await generateVisualBrief(word, {
+    definition: params.definition,
+    synonyms: params.synonyms,
+    examples: params.examples,
+    apiKey: params.apiKey,
+  });
+  let prompt = buildImagePrompt(word, params.definition, { synonyms: params.synonyms, examples: params.examples });
+  if (brief) {
+    const details: string[] = [];
+    if (brief.metaphor) details.push(`Metaphor: ${brief.metaphor}.`);
+    if (brief.scene) details.push(`Scene: ${brief.scene}.`);
+    if (brief.main_subject) details.push(`Main subject: ${brief.main_subject}.`);
+    if (brief.background) details.push(`Background: ${brief.background}.`);
+    if (brief.objects?.length) details.push(`Key objects: ${brief.objects.join(', ')}.`);
+    if (brief.colors?.length) details.push(`Color palette: ${brief.colors.join(', ')}.`);
+    prompt += `\nFollow this scene plan:\n- ${details.join('\n- ')}\n`;
+  }
+  return prompt;
+}
+
+// Public helper: generate image from a previously created prompt
+export async function generateImageFromPrompt(
+  prompt: string,
+  params?: { apiKey?: string; size?: string; model?: string; style?: 'natural' | 'vivid'; quality?: 'standard' | 'hd' }
+): Promise<string | null> {
+  const preferred = params?.model || (import.meta.env.VITE_OPENAI_IMAGE_MODEL as string) || 'dall-e-2';
+  const size = (params?.size as string) || (import.meta.env.VITE_OPENAI_IMAGE_SIZE as string) || '512x512';
+  const client = getOpenAIClient(params?.apiKey);
+  const models = Array.from(new Set([preferred, 'dall-e-2', 'gpt-image-1', 'dall-e-3'])) as string[];
+  logImage('generateImageFromPrompt start', { preferred, candidates: models, size });
+  logImage('prompt', prompt.slice(0, 200) + (prompt.length > 200 ? '…' : ''));
+  for (const model of models) {
+    try {
+      const req: any = { model };
+      if (model === 'dall-e-3') {
+        const allowed = new Set(['1024x1024','1024x1792','1792x1024']);
+        req.size = allowed.has(size) ? size : '1024x1024';
+        req.style = params?.style || (import.meta.env.VITE_OPENAI_IMAGE_STYLE as string) || 'natural';
+        req.quality = params?.quality || (import.meta.env.VITE_OPENAI_IMAGE_QUALITY as string) || 'hd';
+        req.prompt = prompt;
+      } else if (model === 'dall-e-2') {
+        const max = 980;
+        req.size = size;
+        req.prompt = prompt.length > max ? (prompt.slice(0, max) + '…') : prompt;
+      } else {
+        const allowed = new Set(['1024x1024','1024x1536','1536x1024','auto']);
+        req.size = allowed.has(size) ? size : '1024x1024';
+        req.prompt = prompt;
+      }
+      logImage('attempt (from prompt)', { model, size: req.size, style: req.style, quality: req.quality });
+      const image = await client.images.generate(req);
+      const b64 = (image as any)?.data?.[0]?.b64_json;
+      const url = (image as any)?.data?.[0]?.url;
+      if (b64) return `data:image/png;base64,${b64}`;
+      if (url) return url;
+    } catch (e) {
+      console.warn('[images] attempt (from prompt) failed', { model, err: describeError(e) });
+    }
+  }
+  logImage('no image produced from prompt');
+  return null;
+}
+
+// Ask a text model for a concise visual brief to ground the image
+async function generateVisualBrief(
+  word: string,
+  params: { definition?: string; synonyms?: string[]; examples?: string[]; apiKey?: string }
+): Promise<VisualBrief | null> {
+  try {
+    const system = 'You are a visual prompt planner for children\'s picture-book style illustrations. Respond with valid JSON only.';
+    const user = `Create a compact visual brief for the word "${word}".
+${params.definition ? `Meaning: ${params.definition}` : ''}
+${params.synonyms && params.synonyms.length ? `Synonyms: ${params.synonyms.slice(0,8).join(', ')}` : ''}
+${params.examples && params.examples.length ? `Examples: ${params.examples.slice(0,2).join(' ')}` : ''}
+
+Return JSON with exactly these keys:
+{
+  "scene": "one sentence scene",
+  "main_subject": "who/what is centered",
+  "background": "short environment description",
+  "objects": ["3-6 concrete objects"],
+  "colors": ["3-5 colors"],
+  "metaphor": "clear visual metaphor if word is abstract",
+  "style": "picture-book"
+}`;
+
+    const completion = await getOpenAIClient(params.apiKey).chat.completions.create({
+      model: import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 400,
+      temperature: 0.3,
+    });
+    const content = completion.choices[0]?.message?.content?.trim();
+    if (!content) return null;
+    const cleaned = stripJSONFences(content);
+    return JSON.parse(cleaned) as VisualBrief;
+  } catch (err) {
+    console.warn('[images] visual brief failed:', describeError(err));
+    return null;
+  }
+}
+
+// Generate an illustration using OpenAI Images API and return a data URL
+export async function generateIllustration(
+  word: string,
+  definition?: string,
+  params?: { apiKey?: string; size?: string; model?: string; synonyms?: string[]; examples?: string[]; style?: 'natural' | 'vivid'; quality?: 'standard' | 'hd' }
+): Promise<string | null> {
+  // Generate a brief to make scenes more literal and kid-friendly
+  const brief = await generateVisualBrief(word, {
+    definition,
+    synonyms: params?.synonyms,
+    examples: params?.examples,
+    apiKey: params?.apiKey,
+  });
+  let prompt = buildImagePrompt(word, definition, { synonyms: params?.synonyms, examples: params?.examples });
+  if (brief) {
+    const details: string[] = [];
+    if (brief.metaphor) details.push(`Metaphor: ${brief.metaphor}.`);
+    if (brief.scene) details.push(`Scene: ${brief.scene}.`);
+    if (brief.main_subject) details.push(`Main subject: ${brief.main_subject}.`);
+    if (brief.background) details.push(`Background: ${brief.background}.`);
+    if (brief.objects?.length) details.push(`Key objects: ${brief.objects.join(', ')}.`);
+    if (brief.colors?.length) details.push(`Color palette: ${brief.colors.join(', ')}.`);
+    prompt += `\nFollow this scene plan:\n- ${details.join('\n- ')}\n`;
+  }
+  const preferred = params?.model || (import.meta.env.VITE_OPENAI_IMAGE_MODEL as string) || 'dall-e-2';
+  const size = (params?.size as string) || (import.meta.env.VITE_OPENAI_IMAGE_SIZE as string) || '512x512';
+  const client = getOpenAIClient(params?.apiKey);
+  const models = Array.from(new Set([preferred, 'dall-e-2', 'gpt-image-1', 'dall-e-3'])) as string[];
+  logImage('generateIllustration start', { word, preferred, candidates: models, size });
+  logImage('prompt', prompt.slice(0, 200) + (prompt.length > 200 ? '…' : ''));
+  for (const model of models) {
+    try {
+      // Prepare request tailored per model
+      const req: any = { model };
+      // DALL·E 3 supports only specific sizes and style/quality
+      if (model === 'dall-e-3') {
+        const allowed = new Set(['1024x1024','1024x1792','1792x1024']);
+        req.size = allowed.has(size) ? size : '1024x1024';
+        req.style = params?.style || (import.meta.env.VITE_OPENAI_IMAGE_STYLE as string) || 'natural';
+        req.quality = params?.quality || (import.meta.env.VITE_OPENAI_IMAGE_QUALITY as string) || 'hd';
+        req.prompt = prompt;
+      } else if (model === 'dall-e-2') {
+        // DALL·E 2 has a short prompt limit (~1000 chars); truncate politely
+        const max = 980;
+        req.size = size; // supports 256/512/1024
+        req.prompt = prompt.length > max ? (prompt.slice(0, max) + '…') : prompt;
+      } else {
+        // gpt-image-1: no style/quality here; restrict size to supported set
+        const allowed = new Set(['1024x1024','1024x1536','1536x1024','auto']);
+        req.size = allowed.has(size) ? size : '1024x1024';
+        req.prompt = prompt;
+      }
+      logImage('attempt', { model, size: req.size, style: req.style, quality: req.quality });
+      const image = await client.images.generate(req);
+      const b64 = (image as any)?.data?.[0]?.b64_json;
+      const url = (image as any)?.data?.[0]?.url;
+      logImage('result', { model, hasB64: !!b64, hasUrl: !!url, b64Len: b64?.length });
+      if (b64) return `data:image/png;base64,${b64}`;
+      if (url) return url;
+      // If neither present, try next model
+    } catch (e) {
+      console.warn('[images] attempt failed', { model, err: describeError(e) });
+      // Try the next model
+    }
+  }
+  logImage('no image data returned after fallbacks', { word });
+  return null;
+}
+
+// Same as generateIllustration but also returns the exact prompt used
+export async function generateIllustrationWithPrompt(
+  word: string,
+  definition?: string,
+  params?: { apiKey?: string; size?: string; model?: string; synonyms?: string[]; examples?: string[]; style?: 'natural' | 'vivid'; quality?: 'standard' | 'hd' }
+): Promise<{ url: string | null; prompt: string }>
+{
+  // Generate a brief to make scenes more literal and kid-friendly
+  const brief = await generateVisualBrief(word, {
+    definition,
+    synonyms: params?.synonyms,
+    examples: params?.examples,
+    apiKey: params?.apiKey,
+  });
+  let prompt = buildImagePrompt(word, definition, { synonyms: params?.synonyms, examples: params?.examples });
+  if (brief) {
+    const details: string[] = [];
+    if (brief.metaphor) details.push(`Metaphor: ${brief.metaphor}.`);
+    if (brief.scene) details.push(`Scene: ${brief.scene}.`);
+    if (brief.main_subject) details.push(`Main subject: ${brief.main_subject}.`);
+    if (brief.background) details.push(`Background: ${brief.background}.`);
+    if (brief.objects?.length) details.push(`Key objects: ${brief.objects.join(', ')}.`);
+    if (brief.colors?.length) details.push(`Color palette: ${brief.colors.join(', ')}.`);
+    prompt += `\nFollow this scene plan:\n- ${details.join('\n- ')}\n`;
+  }
+
+  const preferred = params?.model || (import.meta.env.VITE_OPENAI_IMAGE_MODEL as string) || 'dall-e-2';
+  const size = (params?.size as string) || (import.meta.env.VITE_OPENAI_IMAGE_SIZE as string) || '512x512';
+  const client = getOpenAIClient(params?.apiKey);
+  const models = Array.from(new Set([preferred, 'dall-e-2', 'gpt-image-1', 'dall-e-3'])) as string[];
+  logImage('generateIllustration start', { word, preferred, candidates: models, size });
+  logImage('prompt', prompt.slice(0, 200) + (prompt.length > 200 ? '…' : ''));
+  for (const model of models) {
+    try {
+      // Prepare request tailored per model
+      const req: any = { model };
+      if (model === 'dall-e-3') {
+        const allowed = new Set(['1024x1024','1024x1792','1792x1024']);
+        req.size = allowed.has(size) ? size : '1024x1024';
+        req.style = params?.style || (import.meta.env.VITE_OPENAI_IMAGE_STYLE as string) || 'natural';
+        req.quality = params?.quality || (import.meta.env.VITE_OPENAI_IMAGE_QUALITY as string) || 'hd';
+        req.prompt = prompt;
+      } else if (model === 'dall-e-2') {
+        const max = 980;
+        req.size = size;
+        req.prompt = prompt.length > max ? (prompt.slice(0, max) + '…') : prompt;
+      } else {
+        const allowed = new Set(['1024x1024','1024x1536','1536x1024','auto']);
+        req.size = allowed.has(size) ? size : '1024x1024';
+        req.prompt = prompt;
+      }
+      logImage('attempt', { model, size: req.size, style: req.style, quality: req.quality });
+      const image = await client.images.generate(req);
+      const b64 = (image as any)?.data?.[0]?.b64_json;
+      const url = (image as any)?.data?.[0]?.url;
+      logImage('result', { model, hasB64: !!b64, hasUrl: !!url, b64Len: b64?.length });
+      if (b64) return { url: `data:image/png;base64,${b64}`, prompt };
+      if (url) return { url, prompt };
+    } catch (e) {
+      console.warn('[images] attempt failed', { model, err: describeError(e) });
+    }
+  }
+  logImage('no image data returned after fallbacks', { word });
+  return { url: null, prompt };
+}
+
 /**
  * Test OpenAI connection and API key
  */
-export async function testOpenAIConnection(): Promise<boolean> {
+export async function testOpenAIConnection(apiKey?: string): Promise<boolean> {
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAIClient(apiKey).chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: 'Hello, respond with just "OK"' }],
       max_tokens: 10

@@ -29,20 +29,13 @@ export function ApiKeyModal({ isOpen, onClose, onApiKeySet, currentApiKey }: Api
     setIsTestingConnection(true)
     setConnectionStatus('idle')
     
-    // Temporarily set the API key for testing
-    const originalKey = import.meta.env.VITE_OPENAI_API_KEY
-    // @ts-ignore - This is for testing purposes
-    import.meta.env.VITE_OPENAI_API_KEY = apiKey
-    
     try {
-      const isConnected = await testOpenAIConnection()
+      const isConnected = await testOpenAIConnection(apiKey)
       setConnectionStatus(isConnected ? 'success' : 'error')
     } catch (error) {
+      console.error('Connection test error:', error)
       setConnectionStatus('error')
     } finally {
-      // Restore original key
-      // @ts-ignore
-      import.meta.env.VITE_OPENAI_API_KEY = originalKey
       setIsTestingConnection(false)
     }
   }

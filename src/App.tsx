@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress'
 import { Upload, Sparkles, Download, Settings, AlertTriangle } from 'lucide-react'
 import { ApiKeyModal } from '@/components/ApiKeyModal'
-import { generateFlashcardsBatch, type FlashcardContent } from '@/services/openai'
+import { generateFlashcardsBatch, type FlashcardContent, createImagePrompt, generateImageFromPrompt } from '@/services/openai'
+import { buildAnkiTSV, downloadText } from '@/utils/ankiExport'
 
 function App() {
   const [wordList, setWordList] = useState<string>('')
@@ -14,6 +15,15 @@ function App() {
   const [progress, setProgress] = useState({ completed: 0, total: 0 })
   const [showApiKeyModal, setShowApiKeyModal] = useState(false)
   const [apiKey, setApiKey] = useState<string>('')
+  const [generateImages, setGenerateImages] = useState<boolean>(true)
+  const [imageSize, setImageSize] = useState<string>('512x512')
+  const [imageModel, setImageModel] = useState<string>('dall-e-2')
+  const [imageStyle, setImageStyle] = useState<'natural' | 'vivid'>('natural')
+  const [imageQuality, setImageQuality] = useState<'standard' | 'hd'>('hd')
+  const [imageStatus, setImageStatus] = useState<Record<number, 'pending' | 'success' | 'failed'>>({})
+  const [imageErrors, setImageErrors] = useState<Record<number, string>>({})
+  const DEBUG_IMAGES: boolean = (import.meta.env.VITE_DEBUG_IMAGES as any) !== 'false'
+  const [showPromptsOnly, setShowPromptsOnly] = useState<boolean>(false)
   
   // Load API key from localStorage on mount
   useEffect(() => {
@@ -39,14 +49,16 @@ function App() {
   }
   
   const processWords = async () => {
+    console.log('[ui] processWords clicked')
     // Check if API key is configured
     if (!apiKey || apiKey === 'sk-placeholder-for-development') {
       setShowApiKeyModal(true)
       return
     }
-    
     setIsProcessing(true)
     setProgress({ completed: 0, total: 0 })
+    setImageStatus({})
+    setImageErrors({})
     
     // Parse word list (one word per line)
     const words = wordList
@@ -54,6 +66,15 @@ function App() {
       .map(word => word.trim())
       .filter(word => word.length > 0)
     
+    if (DEBUG_IMAGES) {
+      console.log('[ui] starting generation', {
+        words: words.length,
+        generateImages,
+        imageSize,
+        hasApiKey: !!apiKey,
+      })
+    }
+
     console.log('Processing words:', words)
     
     try {
@@ -61,14 +82,66 @@ function App() {
       // @ts-ignore
       import.meta.env.VITE_OPENAI_API_KEY = apiKey
       
+      // 1) Generate text content first (no images yet)
       const generatedCards = await generateFlashcardsBatch(
         words,
         (completed, total) => {
           setProgress({ completed, total })
-        }
+        },
+        apiKey,
+        { generateImages: false }
       )
-      
       setFlashcards(generatedCards)
+
+      // 2) Always compute prompts first if requested (or if images are on)
+      if (generateImages || showPromptsOnly) {
+        const size = imageSize
+        for (let i = 0; i < generatedCards.length; i++) {
+          let prompt: string | null = null;
+          try {
+            prompt = await createImagePrompt(generatedCards[i].word, {
+              definition: generatedCards[i].definition,
+              synonyms: generatedCards[i].synonyms,
+              examples: generatedCards[i].examples,
+              apiKey,
+            });
+            setFlashcards(prev => {
+              const next = [...prev];
+              next[i] = { ...next[i], imagePrompt: prompt as string };
+              return next;
+            });
+          } catch (e) {
+            if (DEBUG_IMAGES) console.warn('[ui] prompt generation failed', e);
+          }
+
+          if (generateImages) {
+            if (DEBUG_IMAGES) console.log('[ui] image start', { index: i, word: generatedCards[i].word, size, model: imageModel, style: imageStyle, quality: imageQuality });
+            setImageStatus(prev => ({ ...prev, [i]: 'pending' }));
+            try {
+              const url = await generateImageFromPrompt(prompt || '', { apiKey, size, model: imageModel, style: imageStyle, quality: imageQuality });
+              if (url) {
+                setFlashcards(prev => {
+                  const next = [...prev];
+                  next[i] = { ...next[i], imageUrl: url };
+                  return next;
+                });
+                setImageStatus(prev => ({ ...prev, [i]: 'success' }));
+                setImageErrors(prev => ({ ...prev, [i]: '' }));
+                if (DEBUG_IMAGES) console.log('[ui] image success', { index: i, len: url.length });
+              } else {
+                setImageStatus(prev => ({ ...prev, [i]: 'failed' }));
+                setImageErrors(prev => ({ ...prev, [i]: 'No URL returned' }));
+                if (DEBUG_IMAGES) console.warn('[ui] image no url', { index: i });
+              }
+            } catch (e) {
+              setImageStatus(prev => ({ ...prev, [i]: 'failed' }));
+              const message = e instanceof Error ? e.message : String(e);
+              setImageErrors(prev => ({ ...prev, [i]: message }));
+              if (DEBUG_IMAGES) console.error('[ui] image error', { index: i, message });
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error('Error processing words:', error)
       // Show error message or fallback
@@ -78,8 +151,10 @@ function App() {
   }
   
   const exportToAnki = () => {
-    // TODO: Implement Anki export
-    console.log('Exporting to Anki:', flashcards)
+    if (!flashcards.length) return;
+    const tsv = buildAnkiTSV(flashcards);
+    const stamp = new Date().toISOString().slice(0,10);
+    downloadText(`isee-vocab-${stamp}.tsv`, tsv);
   }
   
   const handleApiKeySet = (newApiKey: string) => {
@@ -138,15 +213,15 @@ function App() {
               className="min-h-[200px] font-mono"
             />
             
-            <div className="flex gap-4">
-              <div className="relative">
+            <div className="flex gap-4 flex-wrap items-center">
+              <div className="relative inline-block">
                 <input
                   type="file"
                   accept=".txt,.csv"
                   onChange={handleFileUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-0"
                 />
-                <Button variant="outline">
+                <Button variant="outline" className="relative z-10">
                   <Upload className="h-4 w-4 mr-2" />
                   Upload File
                 </Button>
@@ -155,10 +230,102 @@ function App() {
               <Button 
                 onClick={processWords}
                 disabled={!wordList.trim() || isProcessing}
+                className="relative z-10"
               >
                 <Sparkles className="h-4 w-4 mr-2" />
                 {isProcessing ? 'Generating...' : 'Generate Flashcards'}
               </Button>
+
+              {/* Image generation controls */}
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={generateImages}
+                  onChange={(e) => setGenerateImages(e.target.checked)}
+                />
+                Generate images
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={showPromptsOnly}
+                  onChange={(e) => setShowPromptsOnly(e.target.checked)}
+                  disabled={generateImages}
+                />
+                Show prompts (no images)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                Size
+                <select
+                  className="border rounded px-2 py-1 text-sm bg-background"
+                  value={imageSize}
+                  onChange={(e) => setImageSize(e.target.value)}
+                  disabled={!generateImages}
+                >
+                  {imageModel === 'dall-e-2' && (
+                    <>
+                      <option value="256x256">256×256</option>
+                      <option value="512x512">512×512</option>
+                      <option value="1024x1024">1024×1024</option>
+                    </>
+                  )}
+                  {imageModel === 'gpt-image-1' && (
+                    <>
+                      <option value="1024x1024">1024×1024</option>
+                      <option value="1024x1536">1024×1536 (portrait)</option>
+                      <option value="1536x1024">1536×1024 (landscape)</option>
+                      <option value="auto">auto</option>
+                    </>
+                  )}
+                  {imageModel === 'dall-e-3' && (
+                    <>
+                      <option value="1024x1024">1024×1024</option>
+                      <option value="1024x1792">1024×1792 (portrait)</option>
+                      <option value="1792x1024">1792×1024 (landscape)</option>
+                    </>
+                  )}
+                </select>
+              </label>
+
+              <label className="flex items-center gap-2 text-sm">
+                Model
+                <select
+                  className="border rounded px-2 py-1 text-sm bg-background"
+                  value={imageModel}
+                  onChange={(e) => setImageModel(e.target.value)}
+                  disabled={!generateImages}
+                >
+                  <option value="dall-e-2">dall-e-2 (faster)</option>
+                  <option value="gpt-image-1">gpt-image-1 (better)</option>
+                  <option value="dall-e-3">dall-e-3</option>
+                </select>
+              </label>
+
+              <label className="flex items-center gap-2 text-sm">
+                Style
+                <select
+                  className="border rounded px-2 py-1 text-sm bg-background"
+                  value={imageStyle}
+                  onChange={(e) => setImageStyle(e.target.value as 'natural' | 'vivid')}
+                  disabled={!generateImages || imageModel !== 'dall-e-3'}
+                >
+                  <option value="natural">natural</option>
+                  <option value="vivid">vivid</option>
+                </select>
+              </label>
+
+              <label className="flex items-center gap-2 text-sm">
+                Quality
+                <select
+                  className="border rounded px-2 py-1 text-sm bg-background"
+                  value={imageQuality}
+                  onChange={(e) => setImageQuality(e.target.value as 'standard' | 'hd')}
+                  disabled={!generateImages || imageModel !== 'dall-e-3'}
+                >
+                  <option value="standard">standard</option>
+                  <option value="hd">hd</option>
+                </select>
+              </label>
             </div>
             
             {/* Progress Bar */}
@@ -188,15 +355,26 @@ function App() {
               <div className="space-y-4 max-h-96 overflow-y-auto">
                 {flashcards.slice(0, 3).map((card, index) => (
                   <div key={index} className="p-4 border rounded-lg space-y-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
+                      {generateImages && (
+                        imageStatus[index] === 'pending' ? (
+                          <div className="w-16 h-16 rounded border grid place-items-center text-[10px] text-muted-foreground animate-pulse">
+                            Generating…
+                          </div>
+                        ) : imageStatus[index] === 'failed' ? (
+                          <div className="w-16 h-16 rounded border grid place-items-center text-[10px] text-muted-foreground text-center px-1" title={imageErrors[index] || 'Image generation failed'}>
+                            Image failed
+                          </div>
+                        ) : card.imageUrl ? (
+                          <img
+                            src={card.imageUrl}
+                            alt={`${card.word} illustration`}
+                            className="w-16 h-16 rounded object-cover border"
+                            loading="lazy"
+                          />
+                        ) : null
+                      )}
                       <h3 className="font-semibold text-lg">{card.word}</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        card.difficulty === 'easy' ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' :
-                        card.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
-                        'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-                      }`}>
-                        {card.difficulty}
-                      </span>
                     </div>
                     <p className="text-sm text-muted-foreground">{card.definition}</p>
                     <div className="space-y-1">
@@ -207,14 +385,16 @@ function App() {
                         </p>
                       ))}
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="text-sm font-medium">Synonyms:</span>
-                      {card.synonyms.map((synonym, i) => (
-                        <span key={i} className="px-2 py-1 bg-muted rounded text-xs">
-                          {synonym}
-                        </span>
-                      ))}
-                    </div>
+                    <p className="text-sm"><span className="font-medium">Synonyms:</span> {card.synonyms.join(', ')}</p>
+                    {card.imagePrompt && (
+                      <div className="mt-2">
+                        <p className="text-sm font-medium">Image prompt sent to the model:</p>
+                        <pre className="text-xs bg-muted rounded p-2 whitespace-pre-wrap break-words max-h-48 overflow-auto">{card.imagePrompt}</pre>
+                      </div>
+                    )}
+                    {generateImages && imageStatus[index] === 'failed' && imageErrors[index] && (
+                      <p className="text-xs text-red-600">Image error: {imageErrors[index]}</p>
+                    )}
                   </div>
                 ))}
                 {flashcards.length > 3 && (
