@@ -229,7 +229,7 @@ function App() {
         </div>
 
         {/* Main Input Card */}
-        <Card className="p-8 mb-8 shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+        <Card className="p-8 mb-8 shadow-lg border-0 bg-purple-50/50 backdrop-blur-sm">
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -362,7 +362,7 @@ function App() {
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-3">
             <Button
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 gap-2 transition-colors"
+              className="bg-purple-600 hover:bg-purple-700 text-white gap-2 transition-colors"
               onClick={processWords}
               disabled={!wordList.trim() || isProcessing}
             >
@@ -406,7 +406,7 @@ function App() {
                   <FileText className="w-4 h-4" />
                   Export TSV
                 </Button>
-                <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 gap-2" onClick={exportToApkg}>
+                <Button className="bg-purple-600 hover:bg-purple-700 text-white gap-2" onClick={exportToApkg}>
                   <Package className="w-4 h-4" />
                   Export .apkg
                 </Button>
@@ -429,14 +429,14 @@ function App() {
               return (
                 <div key={index} className="space-y-4">
                   {/* Front of Card */}
-                  <Card className="p-6 shadow-lg border-0 bg-white/90 backdrop-blur-sm">
-                    <div className="px-3 py-1 bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 rounded-full text-sm inline-block mb-4">
+                  <Card className="p-6 shadow-lg border-0 bg-purple-50/80 backdrop-blur-sm">
+                    <div className="px-4 py-2 bg-purple-100 text-purple-700 text-sm font-medium mb-4 inline-block">
                       FRONT
                     </div>
                     <div className="flex items-center gap-3">
                       <h3 className="text-3xl text-gray-900">{word}</h3>
                       {card.audioUrl && (
-                        <button className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 rounded-full flex items-center justify-center transition-all hover:scale-105">
+                        <button className="w-10 h-10 bg-purple-600 hover:bg-purple-700 rounded-full flex items-center justify-center transition-colors">
                           <Volume2 className="w-5 h-5 text-white" />
                         </button>
                       )}
@@ -444,8 +444,8 @@ function App() {
                   </Card>
 
                   {/* Back of Card */}
-                  <Card className="p-8 shadow-lg border-0 bg-white/90 backdrop-blur-sm overflow-hidden">
-                    <div className="px-3 py-1 bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 rounded-full text-sm inline-block mb-6">
+                  <Card className="p-8 shadow-lg border-0 bg-purple-50/80 backdrop-blur-sm overflow-hidden">
+                    <div className="px-4 py-2 bg-purple-100 text-purple-700 text-sm font-medium mb-6 inline-block">
                       BACK
                     </div>
 
@@ -496,7 +496,7 @@ function App() {
                               {synonyms.map((synonym, i) => (
                                 <span
                                   key={i}
-                                  className="px-3 py-1 bg-gradient-to-r from-gray-100 to-gray-50 text-gray-700 rounded-full text-sm border border-gray-200"
+                                  className="px-3 py-1 bg-purple-100 text-purple-700 rounded text-sm"
                                 >
                                   {synonym.trim()}
                                 </span>
@@ -514,7 +514,7 @@ function App() {
         )}
         
         {/* What's Included */}
-        <Card className="p-8 mb-8 shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+        <Card className="p-8 mb-8 shadow-lg border-0 bg-purple-50/50 backdrop-blur-sm">
           <h3 className="text-lg mb-4 text-gray-900">What's Included</h3>
           <p className="text-sm text-gray-600 mb-6">
             Every output mirrors the way cards render inside Anki—no extra tweaking required.
