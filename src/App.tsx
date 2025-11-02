@@ -190,30 +190,33 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4 py-10 text-slate-100">
-      <div className="mx-auto flex max-w-6xl flex-col gap-10">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 px-4 py-16 text-slate-100">
+      <div className="mx-auto flex flex-col gap-12" style={{ maxWidth: '900px', width: '100%' }}>
         {/* Header */}
-        <div className="mx-auto max-w-3xl text-center space-y-4">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-300">
-            Anki-ready in minutes
-          </span>
-          <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">
+        <div className="mx-auto max-w-3xl text-center space-y-6">
+          <div className="inline-flex items-center justify-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-purple-400/30 bg-gradient-to-r from-purple-500/20 to-indigo-500/20 px-5 py-2 text-xs font-bold uppercase tracking-[0.3em] text-purple-200 shadow-lg shadow-purple-500/20 backdrop-blur-sm">
+              <Sparkles className="h-3 w-3" />
+              Anki-ready in minutes
+            </span>
+          </div>
+          <h1 className="text-5xl font-bold leading-tight sm:text-6xl bg-gradient-to-r from-white via-purple-200 to-indigo-200 bg-clip-text text-transparent">
             ISEE Vocabulary Flashcard Generator
           </h1>
-          <p className="text-base text-slate-300 sm:text-lg">
-            Paste a list of words and receive classroom-ready cards styled exactly how they appear inside Anki—complete with audio, imagery, and examples curated for younger learners.
+          <p className="text-lg text-slate-300 sm:text-xl leading-relaxed max-w-2xl mx-auto">
+            Transform your word lists into stunning, AI-powered flashcards complete with professional audio, vivid imagery, and contextual examples—perfectly formatted for Anki.
           </p>
         
           {/* API Key Status */}
-          <div className="mt-3 flex items-center justify-center gap-2">
+          <div className="mt-6 flex items-center justify-center gap-3">
             {apiKey && apiKey !== 'sk-placeholder-for-development' ? (
-              <div className="flex items-center gap-2 rounded-full bg-emerald-400/10 px-4 py-1 text-sm text-emerald-200">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />
-                OpenAI API connected
+              <div className="flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-400/30 px-5 py-2 text-sm font-medium text-emerald-100 shadow-lg shadow-emerald-500/10">
+                <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
+                OpenAI API Connected
               </div>
             ) : (
-              <div className="flex items-center gap-2 rounded-full bg-orange-400/10 px-4 py-1 text-sm text-orange-200">
-                <AlertTriangle className="w-3 h-3" />
+              <div className="flex items-center gap-2 rounded-full bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-400/30 px-5 py-2 text-sm font-medium text-orange-100 shadow-lg shadow-orange-500/10">
+                <AlertTriangle className="w-4 h-4" />
                 API Key Required
               </div>
             )}
@@ -221,47 +224,54 @@ function App() {
               variant="secondary"
               size="sm"
               onClick={() => setShowApiKeyModal(true)}
+              className="rounded-full shadow-lg hover:shadow-xl transition-all"
             >
-              <Settings className="h-4 w-4 mr-1" />
+              <Settings className="h-4 w-4 mr-2" />
               Settings
             </Button>
           </div>
         </div>
 
         {/* Input Section */}
-        <Card className="border-white/10 bg-white/5 shadow-2xl backdrop-blur">
-          <CardHeader className="space-y-3">
-            <CardTitle className="text-2xl font-semibold text-white">Enter Vocabulary Words</CardTitle>
-            <CardDescription className="text-slate-300">
-              Paste words (one per line) or upload a simple text/CSV file. We’ll handle definitions, imagery, audio, and export-ready formatting.
+        <Card className="border-purple-500/20 bg-gradient-to-br from-white/10 to-white/5 shadow-2xl backdrop-blur-xl">
+          <CardHeader className="space-y-4 border-b border-white/10 pb-6">
+            <CardTitle className="text-3xl font-bold text-white flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500/20 to-indigo-500/20 border border-purple-400/30">
+                <Upload className="h-6 w-6 text-purple-200" />
+              </div>
+              Enter Vocabulary Words
+            </CardTitle>
+            <CardDescription className="text-slate-300 text-base">
+              Paste words (one per line) or upload a simple text/CSV file. We'll handle definitions, imagery, audio, and export-ready formatting.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-6 pt-6">
             <Textarea
               placeholder="Enter words here, one per line...&#10;&#10;Example:&#10;aberrant&#10;abstruse&#10;acumen&#10;alacrity"
               value={wordList}
               onChange={(e) => setWordList(e.target.value)}
-              className="min-h-[220px] rounded-lg border-white/10 bg-slate-950/40 font-mono text-slate-50"
+              className="min-h-[240px] rounded-xl border-purple-500/20 bg-slate-950/60 font-mono text-base text-slate-50 shadow-inner focus:border-purple-400/40 focus:ring-2 focus:ring-purple-500/20 transition-all"
             />
             
-            <div className="flex flex-wrap items-center gap-4 border-t border-white/10 pt-4">
-              <div className="relative inline-block overflow-hidden rounded-lg border border-white/15 bg-white/5">
+            <div className="flex flex-wrap items-center gap-4 border-t border-white/10 pt-6">
+              <div className="relative inline-block overflow-hidden rounded-xl border border-purple-400/30 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 hover:from-purple-500/20 hover:to-indigo-500/20 transition-all shadow-lg">
                 <input
                   type="file"
                   accept=".txt,.csv"
                   onChange={handleFileUpload}
                   className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                 />
-                <Button variant="ghost" className="relative z-0 text-slate-100">
+                <Button variant="ghost" className="relative z-0 text-slate-100 font-medium">
                   <Upload className="h-4 w-4 mr-2" />
                   Upload File
                 </Button>
               </div>
 
-              <Button 
+              <Button
                 onClick={processWords}
                 disabled={!wordList.trim() || isProcessing}
-                className="relative z-10 bg-primary text-primary-foreground shadow-lg hover:shadow-primary/40"
+                variant="ghost"
+                className="relative z-10 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white font-semibold shadow-xl hover:shadow-2xl hover:shadow-purple-500/50 transition-all rounded-xl px-6"
               >
                 <Sparkles className="h-4 w-4 mr-2" />
                 {isProcessing ? 'Generating...' : 'Generate Flashcards'}
@@ -387,16 +397,21 @@ function App() {
         
         {/* Results Section */}
         {flashcards.length > 0 && (
-          <Card className="border-white/10 bg-white/5 shadow-2xl backdrop-blur">
-            <CardHeader>
-              <CardTitle className="text-2xl font-semibold text-white">Generated Flashcards</CardTitle>
-              <CardDescription className="text-slate-300">
-                {flashcards.length} flashcards ready for export
+          <Card className="border-purple-500/20 bg-gradient-to-br from-white/10 to-white/5 shadow-2xl backdrop-blur-xl">
+            <CardHeader className="border-b border-white/10 pb-6">
+              <CardTitle className="text-3xl font-bold text-white flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-400/30">
+                  <Sparkles className="h-6 w-6 text-emerald-200" />
+                </div>
+                Generated Flashcards
+              </CardTitle>
+              <CardDescription className="text-slate-300 text-base">
+                {flashcards.length} flashcard{flashcards.length !== 1 ? 's' : ''} ready for export
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 pt-6">
               {/* Preview of generated cards */}
-              <div className="space-y-6 pr-1">
+              <div className="space-y-8 pr-1">
                 {flashcards.map((card, index) => {
                   const word = card.word.charAt(0).toUpperCase() + card.word.slice(1)
                   const frontAudio = card.audioUrl
@@ -411,15 +426,15 @@ function App() {
                       ? [card.synonyms]
                       : []
                   return (
-                    <div key={index} className="rounded-2xl border border-white/10 bg-white/5 shadow-lg backdrop-blur">
-                      <div className="grid gap-6 p-5 md:grid-cols-2">
-                        <div className="rounded-xl border border-white/10 bg-slate-950/70 shadow-inner">
-                          <div className="px-4 py-2 border-b border-white/5 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                            Front
+                    <div key={index} className="rounded-2xl border border-purple-400/20 bg-gradient-to-br from-white/10 to-white/5 shadow-xl backdrop-blur-sm hover:shadow-2xl hover:border-purple-400/30 transition-all">
+                      <div className="grid gap-6 p-6 md:grid-cols-2">
+                        <div className="rounded-xl border border-purple-400/20 bg-gradient-to-br from-slate-900/90 to-slate-950/90 shadow-lg">
+                          <div className="px-4 py-3 border-b border-purple-400/20 bg-gradient-to-r from-purple-500/10 to-indigo-500/10">
+                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-purple-200">Front</span>
                           </div>
-                          <div className="p-4 space-y-4">
+                          <div className="p-5 space-y-4">
                             <div className="flex flex-wrap items-center gap-4">
-                              <h3 className="text-2xl font-semibold tracking-tight text-white">{word}</h3>
+                              <h3 className="text-3xl font-bold tracking-tight text-white">{word}</h3>
                               {frontAudio && (
                                 <audio
                                   controls
@@ -433,11 +448,11 @@ function App() {
                           </div>
                         </div>
 
-                        <div className="rounded-xl border border-white/10 bg-slate-950/60 shadow-inner">
-                          <div className="px-4 py-2 border-b border-white/5 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                            Back
+                        <div className="rounded-xl border border-purple-400/20 bg-gradient-to-br from-slate-900/90 to-slate-950/90 shadow-lg">
+                          <div className="px-4 py-3 border-b border-purple-400/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10">
+                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-200">Back</span>
                           </div>
-                          <div className="p-4 space-y-4">
+                          <div className="p-5 space-y-4">
                             {generateImages && (
                               imageStatus[index] === 'pending' ? (
                                 <div className="grid aspect-video w-full place-items-center rounded-lg border border-white/10 bg-white/5 text-center text-xs text-slate-300 animate-pulse">
@@ -449,8 +464,8 @@ function App() {
                                 </div>
                               ) : card.imageUrl ? (
                                 <div
-                                  className="w-full max-w-sm mt-2"
-                                  style={{ maxWidth: '440px' }}
+                                  className="w-full max-w-sm"
+                                  style={{ maxWidth: '440px', marginTop: '1.5rem' }}
                                 >
                                   <div
                                     className="overflow-hidden rounded-lg border border-white/10 bg-white/10 shadow-sm"
@@ -498,13 +513,13 @@ function App() {
                 })}
               </div>
               
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Button onClick={exportToAnki} className="h-12 rounded-xl bg-primary text-primary-foreground shadow-lg hover:shadow-primary/40">
-                  <Download className="h-4 w-4 mr-2" />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2">
+                <Button onClick={exportToAnki} variant="ghost" className="h-14 rounded-xl border-2 border-purple-400/30 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 hover:from-purple-500/20 hover:to-indigo-500/20 text-slate-100 font-semibold shadow-xl hover:shadow-2xl transition-all">
+                  <Download className="h-5 w-5 mr-2" />
                   Export TSV + media (.zip)
                 </Button>
-                <Button onClick={exportToApkg} variant="secondary" className="h-12 rounded-xl border border-white/20 bg-white/5 text-slate-100 shadow-lg hover:bg-white/10">
-                  <Download className="h-4 w-4 mr-2" />
+                <Button onClick={exportToApkg} variant="ghost" className="h-14 rounded-xl border-2 border-purple-400/30 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 hover:from-purple-500/20 hover:to-indigo-500/20 text-slate-100 font-semibold shadow-xl hover:shadow-2xl transition-all">
+                  <Download className="h-5 w-5 mr-2" />
                   Export Anki package (.apkg)
                 </Button>
               </div>
@@ -513,38 +528,38 @@ function App() {
         )}
         
         {/* Features Info */}
-        <Card className="border-white/10 bg-white/5 shadow-2xl backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-2xl font-semibold text-white">What&apos;s Included</CardTitle>
-            <CardDescription className="text-slate-300">
+        <Card className="border-purple-500/20 bg-gradient-to-br from-white/10 to-white/5 shadow-2xl backdrop-blur-xl">
+          <CardHeader className="border-b border-white/10 pb-6">
+            <CardTitle className="text-3xl font-bold text-white">What&apos;s Included</CardTitle>
+            <CardDescription className="text-slate-300 text-base">
               Every output mirrors the way cards render inside Anki—no extra tweaking required.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <ul className="grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
-              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
-                <span className="text-lg">🎯</span>
-                <span>Kid-friendly language crafted for ISEE-level learners.</span>
+          <CardContent className="pt-6">
+            <ul className="grid gap-4 text-base text-slate-200 sm:grid-cols-2">
+              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
+                <span className="text-2xl">🎯</span>
+                <span className="leading-relaxed">Kid-friendly language crafted for ISEE-level learners.</span>
               </li>
-              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
-                <span className="text-lg">📝</span>
-                <span>Three context-rich example sentences per word.</span>
+              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
+                <span className="text-2xl">📝</span>
+                <span className="leading-relaxed">Three context-rich example sentences per word.</span>
               </li>
-              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
-                <span className="text-lg">🔁</span>
-                <span>Synonym chips for quick mental associations.</span>
+              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
+                <span className="text-2xl">🔁</span>
+                <span className="leading-relaxed">Synonym chips for quick mental associations.</span>
               </li>
-              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
-                <span className="text-lg">🖼️</span>
-                <span>Image-first backs that match Anki&apos;s media layout.</span>
+              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
+                <span className="text-2xl">🖼️</span>
+                <span className="leading-relaxed">Image-first backs that match Anki&apos;s media layout.</span>
               </li>
-              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
-                <span className="text-lg">🔊</span>
-                <span>Pronunciation clips attached to the front of each card.</span>
+              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
+                <span className="text-2xl">🔊</span>
+                <span className="leading-relaxed">Pronunciation clips attached to the front of each card.</span>
               </li>
-              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
-                <span className="text-lg">📦</span>
-                <span>Export as TSV or .apkg and drop straight into existing decks.</span>
+              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
+                <span className="text-2xl">📦</span>
+                <span className="leading-relaxed">Export as TSV or .apkg and drop straight into existing decks.</span>
               </li>
             </ul>
           </CardContent>
