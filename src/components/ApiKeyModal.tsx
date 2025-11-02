@@ -16,6 +16,7 @@ export function ApiKeyModal({ isOpen, onClose, onApiKeySet, currentApiKey }: Api
   const [apiKey, setApiKey] = useState(currentApiKey || '')
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [connectionMessage, setConnectionMessage] = useState<string>('')
   
   useEffect(() => {
     if (currentApiKey) {
@@ -28,10 +29,23 @@ export function ApiKeyModal({ isOpen, onClose, onApiKeySet, currentApiKey }: Api
     
     setIsTestingConnection(true)
     setConnectionStatus('idle')
+    console.log('[ui] Test Connection clicked, keySuffix=', apiKey.slice(-4))
     
     try {
-      const isConnected = await testOpenAIConnection(apiKey)
-      setConnectionStatus(isConnected ? 'success' : 'error')
+      const res = await (async () => {
+        try {
+          // Prefer the detailed verifier if available (tree-shaken otherwise)
+          const mod = await import('@/services/openai')
+          if (typeof mod.verifyOpenAIKey === 'function') {
+            // @ts-ignore dynamic
+            return mod.verifyOpenAIKey(apiKey)
+          }
+        } catch {}
+        return { ok: await testOpenAIConnection(apiKey) }
+      })()
+      console.log('[ui] Test Connection result:', res)
+      setConnectionStatus(res.ok ? 'success' : 'error')
+      setConnectionMessage(res.ok ? '' : (res.error || 'Unknown error'))
     } catch (error) {
       console.error('Connection test error:', error)
       setConnectionStatus('error')
@@ -100,7 +114,7 @@ export function ApiKeyModal({ isOpen, onClose, onApiKeySet, currentApiKey }: Api
               ) : (
                 <>
                   <AlertCircle className="h-4 w-4" />
-                  <span className="text-sm">Connection failed. Please check your API key.</span>
+                  <span className="text-sm">Connection failed. {connectionMessage ? `(${connectionMessage})` : 'Please check your API key.'}</span>
                 </>
               )}
             </div>

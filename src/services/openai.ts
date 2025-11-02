@@ -1,5 +1,8 @@
 import OpenAI from 'openai';
 
+// Debug flags
+const DEBUG: boolean = (import.meta.env.VITE_DEBUG as any) !== 'false';
+
 // Cache for OpenAI clients
 const clientCache = new Map<string, OpenAI>();
 
@@ -7,12 +10,14 @@ function getOpenAIClient(apiKey?: string): OpenAI {
   const key = apiKey || import.meta.env.VITE_OPENAI_API_KEY || 'sk-placeholder';
   
   if (!clientCache.has(key)) {
+    if (DEBUG) console.log('[openai] creating client (cache miss), keySuffix=', key.slice(-4));
     clientCache.set(key, new OpenAI({
       apiKey: key,
       dangerouslyAllowBrowser: true // Note: In production, API calls should go through a backend
     }));
   }
   
+  if (DEBUG) console.log('[openai] reusing client (cache hit), keySuffix=', key.slice(-4));
   return clientCache.get(key)!;
 }
 
@@ -41,6 +46,7 @@ export interface FlashcardContent {
   difficulty?: string;
   imageUrl?: string;
   imagePrompt?: string;
+  audioUrl?: string;
 }
 
 export interface OpenAIResponse {
@@ -157,6 +163,8 @@ export async function generateFlashcardsBatch(
     generateImages?: boolean;
     imageSize?: string;
     onImage?: (index: number, status: 'pending' | 'success' | 'failed', url?: string) => void;
+    generateAudio?: boolean;
+    voice?: string;
   }
 ): Promise<FlashcardContent[]> {
   const results: FlashcardContent[] = [];
@@ -183,6 +191,16 @@ export async function generateFlashcardsBatch(
         } catch (e) {
           console.warn(`Image generation failed for "${word}":`, describeError(e));
           opts?.onImage?.(i, 'failed');
+        }
+      }
+
+      // Optionally generate audio pronunciation
+      if (opts?.generateAudio) {
+        try {
+          const url = await generatePronunciation(word, { apiKey, voice: opts.voice });
+          if (url) content.audioUrl = url;
+        } catch (e) {
+          console.warn(`[audio] pronunciation failed for "${word}":`, describeError(e));
         }
       }
       results.push(content);
@@ -241,18 +259,18 @@ function buildImagePrompt(
     ? `Context hints: ${extras.examples.slice(0, 2).join(' ')}`
     : '';
 
-  return `Create a square, child-friendly picture-book style illustration that clearly represents the word "${word}".
+  return `Create a square, high‑quality image that clearly represents the word "${word}".
 ${baseMeaning}
 ${syn}
 ${ex}
 
 Requirements:
-- Make the meaning obvious at a glance using a concrete scene with characters/objects.
-- Absolutely no text, letters, numbers, symbols, logos, or watermarks anywhere.
-- Avoid abstract geometric patterns or random shapes; avoid grids, triangles, or kaleidoscopic motifs.
-- If the word is abstract, use a clear visual metaphor (e.g., a fish swimming against a school; one path diverging from a crowd; one odd duck among ducks).
-- Center the main subject, use a simple background, warm colors, and high contrast.
-- Keep it friendly for a 10-year-old.`;
+- Make the meaning obvious at a glance using a concrete scene with clear subject(s).
+- No text or handwriting anywhere (no letters, words, logos, signatures, or watermarks).
+- Avoid naive doodles or clipart; choose the most effective style for this word: realistic photo, painterly illustration, or clean vector art.
+- If the word is abstract, use a clear visual metaphor (e.g., one fish swimming against a school; one path diverging from a crowd).
+- Center the main subject and keep the background simple with warm, high‑contrast colors.
+- Keep it appropriate for a 10‑year‑old.`;
 }
 
 // Public helper: build final prompt (including visual brief) without generating an image
@@ -285,10 +303,10 @@ export async function generateImageFromPrompt(
   prompt: string,
   params?: { apiKey?: string; size?: string; model?: string; style?: 'natural' | 'vivid'; quality?: 'standard' | 'hd' }
 ): Promise<string | null> {
-  const preferred = params?.model || (import.meta.env.VITE_OPENAI_IMAGE_MODEL as string) || 'dall-e-2';
-  const size = (params?.size as string) || (import.meta.env.VITE_OPENAI_IMAGE_SIZE as string) || '512x512';
+  const preferred = params?.model || (import.meta.env.VITE_OPENAI_IMAGE_MODEL as string) || 'dall-e-3';
+  const size = (params?.size as string) || (import.meta.env.VITE_OPENAI_IMAGE_SIZE as string) || '1024x1024';
   const client = getOpenAIClient(params?.apiKey);
-  const models = Array.from(new Set([preferred, 'dall-e-2', 'gpt-image-1', 'dall-e-3'])) as string[];
+  const models = Array.from(new Set([preferred, 'dall-e-3', 'dall-e-2'])) as string[];
   logImage('generateImageFromPrompt start', { preferred, candidates: models, size });
   logImage('prompt', prompt.slice(0, 200) + (prompt.length > 200 ? '…' : ''));
   for (const model of models) {
@@ -299,14 +317,17 @@ export async function generateImageFromPrompt(
         req.size = allowed.has(size) ? size : '1024x1024';
         req.style = params?.style || (import.meta.env.VITE_OPENAI_IMAGE_STYLE as string) || 'natural';
         req.quality = params?.quality || (import.meta.env.VITE_OPENAI_IMAGE_QUALITY as string) || 'hd';
+        req.response_format = 'b64_json';
         req.prompt = prompt;
       } else if (model === 'dall-e-2') {
         const max = 980;
         req.size = size;
         req.prompt = prompt.length > max ? (prompt.slice(0, max) + '…') : prompt;
+        req.response_format = 'b64_json';
       } else {
         const allowed = new Set(['1024x1024','1024x1536','1536x1024','auto']);
         req.size = allowed.has(size) ? size : '1024x1024';
+        req.response_format = 'b64_json';
         req.prompt = prompt;
       }
       logImage('attempt (from prompt)', { model, size: req.size, style: req.style, quality: req.quality });
@@ -390,10 +411,10 @@ export async function generateIllustration(
     if (brief.colors?.length) details.push(`Color palette: ${brief.colors.join(', ')}.`);
     prompt += `\nFollow this scene plan:\n- ${details.join('\n- ')}\n`;
   }
-  const preferred = params?.model || (import.meta.env.VITE_OPENAI_IMAGE_MODEL as string) || 'dall-e-2';
-  const size = (params?.size as string) || (import.meta.env.VITE_OPENAI_IMAGE_SIZE as string) || '512x512';
+  const preferred = params?.model || (import.meta.env.VITE_OPENAI_IMAGE_MODEL as string) || 'dall-e-3';
+  const size = (params?.size as string) || (import.meta.env.VITE_OPENAI_IMAGE_SIZE as string) || '1024x1024';
   const client = getOpenAIClient(params?.apiKey);
-  const models = Array.from(new Set([preferred, 'dall-e-2', 'gpt-image-1', 'dall-e-3'])) as string[];
+  const models = Array.from(new Set([preferred, 'dall-e-3', 'dall-e-2'])) as string[];
   logImage('generateIllustration start', { word, preferred, candidates: models, size });
   logImage('prompt', prompt.slice(0, 200) + (prompt.length > 200 ? '…' : ''));
   for (const model of models) {
@@ -406,16 +427,19 @@ export async function generateIllustration(
         req.size = allowed.has(size) ? size : '1024x1024';
         req.style = params?.style || (import.meta.env.VITE_OPENAI_IMAGE_STYLE as string) || 'natural';
         req.quality = params?.quality || (import.meta.env.VITE_OPENAI_IMAGE_QUALITY as string) || 'hd';
+        req.response_format = 'b64_json';
         req.prompt = prompt;
       } else if (model === 'dall-e-2') {
         // DALL·E 2 has a short prompt limit (~1000 chars); truncate politely
         const max = 980;
         req.size = size; // supports 256/512/1024
         req.prompt = prompt.length > max ? (prompt.slice(0, max) + '…') : prompt;
+        req.response_format = 'b64_json';
       } else {
         // gpt-image-1: no style/quality here; restrict size to supported set
         const allowed = new Set(['1024x1024','1024x1536','1536x1024','auto']);
         req.size = allowed.has(size) ? size : '1024x1024';
+        req.response_format = 'b64_json';
         req.prompt = prompt;
       }
       logImage('attempt', { model, size: req.size, style: req.style, quality: req.quality });
@@ -461,10 +485,10 @@ export async function generateIllustrationWithPrompt(
     prompt += `\nFollow this scene plan:\n- ${details.join('\n- ')}\n`;
   }
 
-  const preferred = params?.model || (import.meta.env.VITE_OPENAI_IMAGE_MODEL as string) || 'dall-e-2';
-  const size = (params?.size as string) || (import.meta.env.VITE_OPENAI_IMAGE_SIZE as string) || '512x512';
+  const preferred = params?.model || (import.meta.env.VITE_OPENAI_IMAGE_MODEL as string) || 'dall-e-3';
+  const size = (params?.size as string) || (import.meta.env.VITE_OPENAI_IMAGE_SIZE as string) || '1024x1024';
   const client = getOpenAIClient(params?.apiKey);
-  const models = Array.from(new Set([preferred, 'dall-e-2', 'gpt-image-1', 'dall-e-3'])) as string[];
+  const models = Array.from(new Set([preferred, 'dall-e-3', 'dall-e-2'])) as string[];
   logImage('generateIllustration start', { word, preferred, candidates: models, size });
   logImage('prompt', prompt.slice(0, 200) + (prompt.length > 200 ? '…' : ''));
   for (const model of models) {
@@ -504,17 +528,77 @@ export async function generateIllustrationWithPrompt(
 /**
  * Test OpenAI connection and API key
  */
-export async function testOpenAIConnection(apiKey?: string): Promise<boolean> {
+export async function verifyOpenAIKey(apiKey?: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const completion = await getOpenAIClient(apiKey).chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: 'Hello, respond with just "OK"' }],
-      max_tokens: 10
-    });
-    
-    return !!completion.choices[0]?.message?.content;
+    // Fast check: can we retrieve a common model? (less tokens than a chat call)
+    const client = getOpenAIClient(apiKey);
+    try {
+      if (DEBUG) console.log('[verify] retrieving model gpt-4o-mini');
+      await client.models.retrieve('gpt-4o-mini');
+      if (DEBUG) console.log('[verify] model reachable');
+      return { ok: true };
+    } catch (e) {
+      // If model access is restricted, fall back to a 1‑token chat ping to surface clearer errors
+      try {
+        if (DEBUG) console.log('[verify] fallback to 1-token chat ping');
+        const completion = await client.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: 'OK' }],
+          max_tokens: 1,
+        });
+        const ok = !!completion.choices[0]?.message?.content;
+        if (DEBUG) console.log('[verify] chat ping result ok=', ok);
+        return { ok };
+      } catch (ee) {
+        const err = describeError(ee);
+        if (DEBUG) console.warn('[verify] chat ping failed', err);
+        return { ok: false, error: err };
+      }
+    }
   } catch (error) {
-    console.error('OpenAI connection test failed:', error);
-    return false;
+    const msg = describeError(error);
+    console.error('OpenAI key verification failed:', msg);
+    return { ok: false, error: msg };
+  }
+}
+
+// Backwards compatibility for components calling the old function
+export async function testOpenAIConnection(apiKey?: string): Promise<boolean> {
+  const res = await verifyOpenAIKey(apiKey);
+  return res.ok;
+}
+
+/**
+ * Generate a short pronunciation audio for the given word.
+ * Returns a blob URL (e.g., to use in an <audio> tag).
+ */
+export async function generatePronunciation(
+  word: string,
+  params?: { apiKey?: string; voice?: string; format?: 'mp3' | 'wav' | 'ogg' }
+): Promise<string | null> {
+  try {
+    const client = getOpenAIClient(params?.apiKey);
+    const voice = params?.voice || (import.meta.env.VITE_OPENAI_VOICE as string) || 'alloy';
+    const format = params?.format || 'mp3';
+    if (DEBUG) console.log('[audio] request', { word, voice, format });
+    const response: any = await (client as any).audio.speech.create({
+      model: (import.meta.env.VITE_OPENAI_TTS_MODEL as string) || 'gpt-4o-mini-tts',
+      voice,
+      input: word,
+      format,
+    } as any);
+    const ab = await response.arrayBuffer();
+    const type = format === 'wav' ? 'audio/wav' : format === 'ogg' ? 'audio/ogg' : 'audio/mpeg';
+    // Convert to base64 data URL for reliable zipping without extra fetch
+    const bytes = new Uint8Array(ab);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const b64 = btoa(binary);
+    const dataUrl = `data:${type};base64,${b64}`;
+    if (DEBUG) console.log('[audio] success', { bytes: (ab as ArrayBuffer).byteLength, type });
+    return dataUrl;
+  } catch (e) {
+    console.warn('[audio] failed', describeError(e));
+    return null;
   }
 }

@@ -5,8 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress'
 import { Upload, Sparkles, Download, Settings, AlertTriangle } from 'lucide-react'
 import { ApiKeyModal } from '@/components/ApiKeyModal'
-import { generateFlashcardsBatch, type FlashcardContent, createImagePrompt, generateImageFromPrompt } from '@/services/openai'
-import { buildAnkiTSV, downloadText } from '@/utils/ankiExport'
+import { generateFlashcardsBatch, type FlashcardContent, createImagePrompt, generateImageFromPrompt, verifyOpenAIKey } from '@/services/openai'
+import { buildAnkiTSV, downloadText, exportAnkiZip, exportAnkiApkg } from '@/utils/ankiExport'
 
 function App() {
   const [wordList, setWordList] = useState<string>('')
@@ -16,14 +16,15 @@ function App() {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false)
   const [apiKey, setApiKey] = useState<string>('')
   const [generateImages, setGenerateImages] = useState<boolean>(true)
-  const [imageSize, setImageSize] = useState<string>('512x512')
-  const [imageModel, setImageModel] = useState<string>('dall-e-2')
-  const [imageStyle, setImageStyle] = useState<'natural' | 'vivid'>('natural')
+  const [imageSize, setImageSize] = useState<string>('1024x1024')
+  const [imageModel, setImageModel] = useState<string>('dall-e-3')
+  const [imageStyle, setImageStyle] = useState<'natural' | 'vivid'>('vivid')
   const [imageQuality, setImageQuality] = useState<'standard' | 'hd'>('hd')
   const [imageStatus, setImageStatus] = useState<Record<number, 'pending' | 'success' | 'failed'>>({})
   const [imageErrors, setImageErrors] = useState<Record<number, string>>({})
   const DEBUG_IMAGES: boolean = (import.meta.env.VITE_DEBUG_IMAGES as any) !== 'false'
-  const [showPromptsOnly, setShowPromptsOnly] = useState<boolean>(false)
+  const [generateAudio, setGenerateAudio] = useState<boolean>(true)
+  const [voice, setVoice] = useState<string>((import.meta.env.VITE_OPENAI_VOICE as any) || 'alloy')
   
   // Load API key from localStorage on mount
   useEffect(() => {
@@ -55,6 +56,18 @@ function App() {
       setShowApiKeyModal(true)
       return
     }
+    // Quick health check so the "Connected" badge isn't misleading
+    try {
+      const res = await verifyOpenAIKey(apiKey)
+      console.log('[ui] verify key result', res)
+      if (!res.ok) {
+        alert(`OpenAI API key did not validate. ${res.error ? 'Details: ' + res.error : ''}`)
+        setShowApiKeyModal(true)
+        return
+      }
+    } catch (e) {
+      console.warn('OpenAI validation failed', e)
+    }
     setIsProcessing(true)
     setProgress({ completed: 0, total: 0 })
     setImageStatus({})
@@ -71,6 +84,9 @@ function App() {
         words: words.length,
         generateImages,
         imageSize,
+        imageModel,
+        imageStyle,
+        imageQuality,
         hasApiKey: !!apiKey,
       })
     }
@@ -89,12 +105,12 @@ function App() {
           setProgress({ completed, total })
         },
         apiKey,
-        { generateImages: false }
+        { generateImages: false, generateAudio, voice }
       )
       setFlashcards(generatedCards)
 
       // 2) Always compute prompts first if requested (or if images are on)
-      if (generateImages || showPromptsOnly) {
+      if (generateImages) {
         const size = imageSize
         for (let i = 0; i < generatedCards.length; i++) {
           let prompt: string | null = null;
@@ -150,11 +166,21 @@ function App() {
     }
   }
   
-  const exportToAnki = () => {
+  const exportToAnki = async () => {
     if (!flashcards.length) return;
-    const tsv = buildAnkiTSV(flashcards);
-    const stamp = new Date().toISOString().slice(0,10);
-    downloadText(`isee-vocab-${stamp}.tsv`, tsv);
+    try {
+      await exportAnkiZip(flashcards, { deckName: 'isee-vocab' })
+    } catch (e) {
+      console.warn('[anki] zip export failed, falling back to TSV', e)
+      const tsv = buildAnkiTSV(flashcards)
+      const stamp = new Date().toISOString().slice(0,10)
+      downloadText(`isee-vocab-${stamp}.tsv`, tsv)
+    }
+  }
+
+  const exportToApkg = async () => {
+    if (!flashcards.length) return;
+    await exportAnkiApkg(flashcards, { deckName: 'isee-vocab' })
   }
   
   const handleApiKeySet = (newApiKey: string) => {
@@ -164,30 +190,35 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4 py-10 text-slate-100">
+      <div className="mx-auto flex max-w-6xl flex-col gap-10">
         {/* Header */}
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold">ISEE Vocabulary Flashcard Generator</h1>
-          <p className="text-muted-foreground">
-            Transform your vocabulary list into engaging Anki flashcards with AI-generated content
+        <div className="mx-auto max-w-3xl text-center space-y-4">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-300">
+            Anki-ready in minutes
+          </span>
+          <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">
+            ISEE Vocabulary Flashcard Generator
+          </h1>
+          <p className="text-base text-slate-300 sm:text-lg">
+            Paste a list of words and receive classroom-ready cards styled exactly how they appear inside Anki—complete with audio, imagery, and examples curated for younger learners.
           </p>
-          
+        
           {/* API Key Status */}
-          <div className="flex items-center justify-center gap-2 mt-4">
+          <div className="mt-3 flex items-center justify-center gap-2">
             {apiKey && apiKey !== 'sk-placeholder-for-development' ? (
-              <div className="flex items-center gap-2 px-3 py-1 bg-green-100 dark:bg-green-900/20 rounded-full text-sm text-green-700 dark:text-green-400">
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
-                OpenAI API Connected
+              <div className="flex items-center gap-2 rounded-full bg-emerald-400/10 px-4 py-1 text-sm text-emerald-200">
+                <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />
+                OpenAI API connected
               </div>
             ) : (
-              <div className="flex items-center gap-2 px-3 py-1 bg-orange-100 dark:bg-orange-900/20 rounded-full text-sm text-orange-700 dark:text-orange-400">
+              <div className="flex items-center gap-2 rounded-full bg-orange-400/10 px-4 py-1 text-sm text-orange-200">
                 <AlertTriangle className="w-3 h-3" />
                 API Key Required
               </div>
             )}
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={() => setShowApiKeyModal(true)}
             >
@@ -196,48 +227,48 @@ function App() {
             </Button>
           </div>
         </div>
-        
+
         {/* Input Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Enter Vocabulary Words</CardTitle>
-            <CardDescription>
-              Paste your word list below (one word per line) or upload a text/CSV file
+        <Card className="border-white/10 bg-white/5 shadow-2xl backdrop-blur">
+          <CardHeader className="space-y-3">
+            <CardTitle className="text-2xl font-semibold text-white">Enter Vocabulary Words</CardTitle>
+            <CardDescription className="text-slate-300">
+              Paste words (one per line) or upload a simple text/CSV file. We’ll handle definitions, imagery, audio, and export-ready formatting.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             <Textarea
               placeholder="Enter words here, one per line...&#10;&#10;Example:&#10;aberrant&#10;abstruse&#10;acumen&#10;alacrity"
               value={wordList}
               onChange={(e) => setWordList(e.target.value)}
-              className="min-h-[200px] font-mono"
+              className="min-h-[220px] rounded-lg border-white/10 bg-slate-950/40 font-mono text-slate-50"
             />
             
-            <div className="flex gap-4 flex-wrap items-center">
-              <div className="relative inline-block">
+            <div className="flex flex-wrap items-center gap-4 border-t border-white/10 pt-4">
+              <div className="relative inline-block overflow-hidden rounded-lg border border-white/15 bg-white/5">
                 <input
                   type="file"
                   accept=".txt,.csv"
                   onChange={handleFileUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-0"
+                  className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                 />
-                <Button variant="outline" className="relative z-10">
+                <Button variant="ghost" className="relative z-0 text-slate-100">
                   <Upload className="h-4 w-4 mr-2" />
                   Upload File
                 </Button>
               </div>
-              
+
               <Button 
                 onClick={processWords}
                 disabled={!wordList.trim() || isProcessing}
-                className="relative z-10"
+                className="relative z-10 bg-primary text-primary-foreground shadow-lg hover:shadow-primary/40"
               >
                 <Sparkles className="h-4 w-4 mr-2" />
                 {isProcessing ? 'Generating...' : 'Generate Flashcards'}
               </Button>
 
               {/* Image generation controls */}
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
                 <input
                   type="checkbox"
                   checked={generateImages}
@@ -245,19 +276,32 @@ function App() {
                 />
                 Generate images
               </label>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
                 <input
                   type="checkbox"
-                  checked={showPromptsOnly}
-                  onChange={(e) => setShowPromptsOnly(e.target.checked)}
-                  disabled={generateImages}
+                  checked={generateAudio}
+                  onChange={(e) => setGenerateAudio(e.target.checked)}
                 />
-                Show prompts (no images)
+                Generate pronunciation
               </label>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
+                Voice
+                <select
+                  className="rounded border border-white/10 bg-slate-900 px-2 py-1 text-sm"
+                  value={voice}
+                  onChange={(e) => setVoice(e.target.value)}
+                  disabled={!generateAudio}
+                >
+                  <option value="alloy">alloy</option>
+                  <option value="aria">aria</option>
+                  <option value="verse">verse</option>
+                  <option value="coral">coral</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-300">
                 Size
                 <select
-                  className="border rounded px-2 py-1 text-sm bg-background"
+                  className="rounded border border-white/10 bg-slate-900 px-2 py-1 text-sm"
                   value={imageSize}
                   onChange={(e) => setImageSize(e.target.value)}
                   disabled={!generateImages}
@@ -287,10 +331,10 @@ function App() {
                 </select>
               </label>
 
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
                 Model
                 <select
-                  className="border rounded px-2 py-1 text-sm bg-background"
+                  className="rounded border border-white/10 bg-slate-900 px-2 py-1 text-sm"
                   value={imageModel}
                   onChange={(e) => setImageModel(e.target.value)}
                   disabled={!generateImages}
@@ -301,10 +345,10 @@ function App() {
                 </select>
               </label>
 
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
                 Style
                 <select
-                  className="border rounded px-2 py-1 text-sm bg-background"
+                  className="rounded border border-white/10 bg-slate-900 px-2 py-1 text-sm"
                   value={imageStyle}
                   onChange={(e) => setImageStyle(e.target.value as 'natural' | 'vivid')}
                   disabled={!generateImages || imageModel !== 'dall-e-3'}
@@ -314,10 +358,10 @@ function App() {
                 </select>
               </label>
 
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
                 Quality
                 <select
-                  className="border rounded px-2 py-1 text-sm bg-background"
+                  className="rounded border border-white/10 bg-slate-900 px-2 py-1 text-sm"
                   value={imageQuality}
                   onChange={(e) => setImageQuality(e.target.value as 'standard' | 'hd')}
                   disabled={!generateImages || imageModel !== 'dall-e-3'}
@@ -343,109 +387,164 @@ function App() {
         
         {/* Results Section */}
         {flashcards.length > 0 && (
-          <Card>
+          <Card className="border-white/10 bg-white/5 shadow-2xl backdrop-blur">
             <CardHeader>
-              <CardTitle>Generated Flashcards</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-2xl font-semibold text-white">Generated Flashcards</CardTitle>
+              <CardDescription className="text-slate-300">
                 {flashcards.length} flashcards ready for export
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Preview of first few cards */}
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {flashcards.slice(0, 3).map((card, index) => (
-                  <div key={index} className="p-4 border rounded-lg space-y-3">
-                    <div className="flex items-center gap-3">
-                      {generateImages && (
-                        imageStatus[index] === 'pending' ? (
-                          <div className="w-16 h-16 rounded border grid place-items-center text-[10px] text-muted-foreground animate-pulse">
-                            Generating…
+            <CardContent className="space-y-6">
+              {/* Preview of generated cards */}
+              <div className="space-y-6 pr-1">
+                {flashcards.map((card, index) => {
+                  const word = card.word.charAt(0).toUpperCase() + card.word.slice(1)
+                  const frontAudio = card.audioUrl
+                  const examples = Array.isArray(card.examples)
+                    ? card.examples.filter(Boolean)
+                    : typeof card.examples === 'string'
+                      ? [card.examples]
+                      : []
+                  const synonyms = Array.isArray(card.synonyms)
+                    ? card.synonyms.filter(Boolean)
+                    : typeof card.synonyms === 'string'
+                      ? [card.synonyms]
+                      : []
+                  return (
+                    <div key={index} className="rounded-2xl border border-white/10 bg-white/5 shadow-lg backdrop-blur">
+                      <div className="grid gap-6 p-5 md:grid-cols-2">
+                        <div className="rounded-xl border border-white/10 bg-slate-950/70 shadow-inner">
+                          <div className="px-4 py-2 border-b border-white/5 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                            Front
                           </div>
-                        ) : imageStatus[index] === 'failed' ? (
-                          <div className="w-16 h-16 rounded border grid place-items-center text-[10px] text-muted-foreground text-center px-1" title={imageErrors[index] || 'Image generation failed'}>
-                            Image failed
+                          <div className="p-4 space-y-4">
+                            <div className="flex flex-wrap items-center gap-4">
+                              <h3 className="text-2xl font-semibold tracking-tight text-white">{word}</h3>
+                              {frontAudio && (
+                                <audio
+                                  controls
+                                  preload="metadata"
+                                  controlsList="nodownload"
+                                  src={frontAudio}
+                                  className="h-10 max-w-[180px]"
+                                />
+                              )}
+                            </div>
                           </div>
-                        ) : card.imageUrl ? (
-                          <img
-                            src={card.imageUrl}
-                            alt={`${card.word} illustration`}
-                            className="w-16 h-16 rounded object-cover border"
-                            loading="lazy"
-                          />
-                        ) : null
-                      )}
-                      <h3 className="font-semibold text-lg">{card.word}</h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{card.definition}</p>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">Examples:</p>
-                      {card.examples.map((example, i) => (
-                        <p key={i} className="text-sm pl-4 border-l-2 border-muted">
-                          {example}
-                        </p>
-                      ))}
-                    </div>
-                    <p className="text-sm"><span className="font-medium">Synonyms:</span> {card.synonyms.join(', ')}</p>
-                    {card.imagePrompt && (
-                      <div className="mt-2">
-                        <p className="text-sm font-medium">Image prompt sent to the model:</p>
-                        <pre className="text-xs bg-muted rounded p-2 whitespace-pre-wrap break-words max-h-48 overflow-auto">{card.imagePrompt}</pre>
+                        </div>
+
+                        <div className="rounded-xl border border-white/10 bg-slate-950/60 shadow-inner">
+                          <div className="px-4 py-2 border-b border-white/5 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                            Back
+                          </div>
+                          <div className="p-4 space-y-4">
+                            {generateImages && (
+                              imageStatus[index] === 'pending' ? (
+                                <div className="grid aspect-video w-full place-items-center rounded-lg border border-white/10 bg-white/5 text-center text-xs text-slate-300 animate-pulse">
+                                  Generating illustration…
+                                </div>
+                              ) : imageStatus[index] === 'failed' ? (
+                                <div className="rounded-lg border border-dashed border-red-400/30 bg-red-400/10 p-4 text-center text-xs text-red-200">
+                                  {imageErrors[index] || 'Illustration unavailable'}
+                                </div>
+                              ) : card.imageUrl ? (
+                                <div
+                                  className="w-full max-w-sm mt-2"
+                                  style={{ maxWidth: '440px' }}
+                                >
+                                  <div
+                                    className="overflow-hidden rounded-lg border border-white/10 bg-white/10 shadow-sm"
+                                    style={{ height: '300px' }}
+                                  >
+                                    <img
+                                      src={card.imageUrl}
+                                      alt={`${card.word} illustration`}
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                      loading="lazy"
+                                    />
+                                  </div>
+                                </div>
+                              ) : null
+                            )}
+
+                            {card.definition && (
+                              <p className="text-base leading-relaxed text-slate-100">{card.definition}</p>
+                            )}
+
+                            {examples.length > 0 && (
+                              <div className="space-y-2">
+                                <p className="text-sm font-semibold text-slate-100">Examples</p>
+                                <ul className="space-y-2 text-sm text-slate-300">
+                                  {examples.map((example, i) => (
+                                    <li key={i} className="rounded-md border-l-4 border-primary/60 bg-white/5 px-3 py-2">
+                                      {example}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {synonyms.length > 0 && (
+                              <div className="space-y-2">
+                                <p className="text-sm font-semibold text-slate-100">Synonyms</p>
+                                <p className="text-sm text-slate-300">{synonyms.join(', ')}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    {generateImages && imageStatus[index] === 'failed' && imageErrors[index] && (
-                      <p className="text-xs text-red-600">Image error: {imageErrors[index]}</p>
-                    )}
-                  </div>
-                ))}
-                {flashcards.length > 3 && (
-                  <p className="text-center text-muted-foreground">
-                    ... and {flashcards.length - 3} more cards
-                  </p>
-                )}
+                    </div>
+                  )
+                })}
               </div>
               
-              <Button onClick={exportToAnki} className="w-full">
-                <Download className="h-4 w-4 mr-2" />
-                Export to Anki
-              </Button>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Button onClick={exportToAnki} className="h-12 rounded-xl bg-primary text-primary-foreground shadow-lg hover:shadow-primary/40">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export TSV + media (.zip)
+                </Button>
+                <Button onClick={exportToApkg} variant="secondary" className="h-12 rounded-xl border border-white/20 bg-white/5 text-slate-100 shadow-lg hover:bg-white/10">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Anki package (.apkg)
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
         
         {/* Features Info */}
-        <Card>
+        <Card className="border-white/10 bg-white/5 shadow-2xl backdrop-blur">
           <CardHeader>
-            <CardTitle>What's Included</CardTitle>
+            <CardTitle className="text-2xl font-semibold text-white">What&apos;s Included</CardTitle>
+            <CardDescription className="text-slate-300">
+              Every output mirrors the way cards render inside Anki—no extra tweaking required.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-start">
-                <span className="mr-2">🎯</span>
-                <span>Kid-friendly definitions (10-year-old level)</span>
+            <ul className="grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
+              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
+                <span className="text-lg">🎯</span>
+                <span>Kid-friendly language crafted for ISEE-level learners.</span>
               </li>
-              <li className="flex items-start">
-                <span className="mr-2">📝</span>
-                <span>3 contextual example sentences per word</span>
+              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
+                <span className="text-lg">📝</span>
+                <span>Three context-rich example sentences per word.</span>
               </li>
-              <li className="flex items-start">
-                <span className="mr-2">🔄</span>
-                <span>3-4 synonyms and related phrases</span>
+              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
+                <span className="text-lg">🔁</span>
+                <span>Synonym chips for quick mental associations.</span>
               </li>
-              <li className="flex items-start">
-                <span className="mr-2">📊</span>
-                <span>Difficulty level assessment (easy/medium/hard)</span>
+              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
+                <span className="text-lg">🖼️</span>
+                <span>Image-first backs that match Anki&apos;s media layout.</span>
               </li>
-              <li className="flex items-start">
-                <span className="mr-2">🖼️</span>
-                <span>Square illustrations for visual memory (coming soon)</span>
+              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
+                <span className="text-lg">🔊</span>
+                <span>Pronunciation clips attached to the front of each card.</span>
               </li>
-              <li className="flex items-start">
-                <span className="mr-2">🔊</span>
-                <span>Audio pronunciation for each word (coming soon)</span>
-              </li>
-              <li className="flex items-start">
-                <span className="mr-2">📚</span>
-                <span>Ready-to-import Anki deck format</span>
+              <li className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
+                <span className="text-lg">📦</span>
+                <span>Export as TSV or .apkg and drop straight into existing decks.</span>
               </li>
             </ul>
           </CardContent>
