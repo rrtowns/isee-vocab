@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Upload, Sparkles, Download, Settings, AlertTriangle } from 'lucide-react'
+import { Upload, Sparkles, Download, Settings, ChevronDown, FileText, Package, Key, Volume2 } from 'lucide-react'
 import { ApiKeyModal } from '@/components/ApiKeyModal'
 import { generateFlashcardsBatch, type FlashcardContent, createImagePrompt, generateImageFromPrompt, verifyOpenAIKey } from '@/services/openai'
 import { buildAnkiTSV, downloadText, exportAnkiZip, exportAnkiApkg } from '@/utils/ankiExport'
@@ -25,7 +25,8 @@ function App() {
   const DEBUG_IMAGES: boolean = (import.meta.env.VITE_DEBUG_IMAGES as any) !== 'false'
   const [generateAudio, setGenerateAudio] = useState<boolean>(true)
   const [voice, setVoice] = useState<string>((import.meta.env.VITE_OPENAI_VOICE as any) || 'alloy')
-  
+  const [showSettings, setShowSettings] = useState(false)
+
   // Load API key from localStorage on mount
   useEffect(() => {
     const savedApiKey = localStorage.getItem('openai_api_key')
@@ -190,379 +191,384 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 px-4 py-16 text-slate-100">
-      <div className="mx-auto flex flex-col gap-12" style={{ maxWidth: '900px', width: '100%' }}>
-        {/* Header */}
-        <div className="mx-auto max-w-3xl text-center space-y-6">
-          <div className="inline-flex items-center justify-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-purple-400/30 bg-gradient-to-r from-purple-500/20 to-indigo-500/20 px-5 py-2 text-xs font-bold uppercase tracking-[0.3em] text-purple-200 shadow-lg shadow-purple-500/20 backdrop-blur-sm">
-              <Sparkles className="h-3 w-3" />
-              Anki-ready in minutes
-            </span>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+      {/* Header */}
+      <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="tracking-tight text-gray-900">ANKI-READY IN MINUTES</h1>
+            </div>
           </div>
-          <h1 className="text-5xl font-bold leading-tight sm:text-6xl bg-gradient-to-r from-white via-purple-200 to-indigo-200 bg-clip-text text-transparent">
-            ISEE Vocabulary Flashcard Generator
-          </h1>
-          <p className="text-lg text-slate-300 sm:text-xl leading-relaxed max-w-2xl mx-auto">
-            Transform your word lists into stunning, AI-powered flashcards complete with professional audio, vivid imagery, and contextual examples—perfectly formatted for Anki.
-          </p>
-        
-          {/* API Key Status */}
-          <div className="mt-6 flex items-center justify-center gap-3">
-            {apiKey && apiKey !== 'sk-placeholder-for-development' ? (
-              <div className="flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-400/30 px-5 py-2 text-sm font-medium text-emerald-100 shadow-lg shadow-emerald-500/10">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
-                OpenAI API Connected
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 rounded-full bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-400/30 px-5 py-2 text-sm font-medium text-orange-100 shadow-lg shadow-orange-500/10">
-                <AlertTriangle className="w-4 h-4" />
-                API Key Required
-              </div>
-            )}
+          <div className="flex items-center gap-3">
             <Button
-              variant="secondary"
-              size="sm"
+              variant="outline"
+              className="gap-2"
               onClick={() => setShowApiKeyModal(true)}
-              className="rounded-full shadow-lg hover:shadow-xl transition-all"
             >
-              <Settings className="h-4 w-4 mr-2" />
+              <Settings className="w-4 h-4" />
               Settings
             </Button>
           </div>
         </div>
+      </header>
 
-        {/* Input Section */}
-        <Card className="border-purple-500/20 bg-gradient-to-br from-white/10 to-white/5 shadow-2xl backdrop-blur-xl">
-          <CardHeader className="space-y-4 border-b border-white/10 pb-6">
-            <CardTitle className="text-3xl font-bold text-white flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500/20 to-indigo-500/20 border border-purple-400/30">
-                <Upload className="h-6 w-6 text-purple-200" />
+      {/* Main Content */}
+      <div className="max-w-6xl mx-auto px-6 pt-12 pb-8">
+        {/* Hero Section */}
+        <div className="text-center mb-12">
+          <h2 className="text-4xl mb-4 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            Transform your word lists into stunning flashcards
+          </h2>
+          <p className="text-gray-600 max-w-3xl mx-auto">
+            AI-powered flashcards complete with professional audio, vivid imagery, and contextual examples—perfectly formatted for Anki.
+          </p>
+        </div>
+
+        {/* Main Input Card */}
+        <Card className="p-8 mb-8 shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-lg text-gray-900">Enter Vocabulary Words</h3>
               </div>
-              Enter Vocabulary Words
-            </CardTitle>
-            <CardDescription className="text-slate-300 text-base">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors"
+              >
+                Advanced options
+                <ChevronDown className={`w-4 h-4 transition-transform ${showSettings ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
               Paste words (one per line) or upload a simple text/CSV file. We'll handle definitions, imagery, audio, and export-ready formatting.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6 pt-6">
+            </p>
             <Textarea
-              placeholder="Enter words here, one per line...&#10;&#10;Example:&#10;aberrant&#10;abstruse&#10;acumen&#10;alacrity"
               value={wordList}
               onChange={(e) => setWordList(e.target.value)}
-              className="min-h-[240px] rounded-xl border-purple-500/20 bg-slate-950/60 font-mono text-base text-slate-50 shadow-inner focus:border-purple-400/40 focus:ring-2 focus:ring-purple-500/20 transition-all"
+              placeholder="Enter words here, one per line...&#10;&#10;Example:&#10;aberrant&#10;abstruse&#10;acumen&#10;alacrity"
+              className="min-h-[200px] font-mono text-sm resize-none border-gray-200 focus:border-indigo-300 focus:ring-indigo-200 placeholder:text-gray-400"
             />
-            
-            <div className="flex flex-wrap items-center gap-4 border-t border-white/10 pt-6">
-              <div className="relative inline-block overflow-hidden rounded-xl border border-purple-400/30 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 hover:from-purple-500/20 hover:to-indigo-500/20 transition-all shadow-lg">
-                <input
-                  type="file"
-                  accept=".txt,.csv"
-                  onChange={handleFileUpload}
-                  className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                />
-                <Button variant="ghost" className="relative z-0 text-slate-100 font-medium">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload File
-                </Button>
-              </div>
+          </div>
 
-              <Button
-                onClick={processWords}
-                disabled={!wordList.trim() || isProcessing}
-                variant="ghost"
-                className="relative z-10 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white font-semibold shadow-xl hover:shadow-2xl hover:shadow-purple-500/50 transition-all rounded-xl px-6"
-              >
-                <Sparkles className="h-4 w-4 mr-2" />
-                {isProcessing ? 'Generating...' : 'Generate Flashcards'}
-              </Button>
-
-              {/* Image generation controls */}
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={generateImages}
-                  onChange={(e) => setGenerateImages(e.target.checked)}
-                />
-                Generate images
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={generateAudio}
-                  onChange={(e) => setGenerateAudio(e.target.checked)}
-                />
-                Generate pronunciation
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                Voice
-                <select
-                  className="rounded border border-white/10 bg-slate-900 px-2 py-1 text-sm"
-                  value={voice}
-                  onChange={(e) => setVoice(e.target.value)}
-                  disabled={!generateAudio}
-                >
-                  <option value="alloy">alloy</option>
-                  <option value="aria">aria</option>
-                  <option value="verse">verse</option>
-                  <option value="coral">coral</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                Size
-                <select
-                  className="rounded border border-white/10 bg-slate-900 px-2 py-1 text-sm"
-                  value={imageSize}
-                  onChange={(e) => setImageSize(e.target.value)}
-                  disabled={!generateImages}
-                >
-                  {imageModel === 'dall-e-2' && (
-                    <>
-                      <option value="256x256">256×256</option>
-                      <option value="512x512">512×512</option>
-                      <option value="1024x1024">1024×1024</option>
-                    </>
-                  )}
-                  {imageModel === 'gpt-image-1' && (
-                    <>
-                      <option value="1024x1024">1024×1024</option>
-                      <option value="1024x1536">1024×1536 (portrait)</option>
-                      <option value="1536x1024">1536×1024 (landscape)</option>
-                      <option value="auto">auto</option>
-                    </>
-                  )}
-                  {imageModel === 'dall-e-3' && (
-                    <>
-                      <option value="1024x1024">1024×1024</option>
-                      <option value="1024x1792">1024×1792 (portrait)</option>
-                      <option value="1792x1024">1792×1024 (landscape)</option>
-                    </>
-                  )}
-                </select>
-              </label>
-
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                Model
-                <select
-                  className="rounded border border-white/10 bg-slate-900 px-2 py-1 text-sm"
-                  value={imageModel}
-                  onChange={(e) => setImageModel(e.target.value)}
-                  disabled={!generateImages}
-                >
-                  <option value="dall-e-2">dall-e-2 (faster)</option>
-                  <option value="gpt-image-1">gpt-image-1 (better)</option>
-                  <option value="dall-e-3">dall-e-3</option>
-                </select>
-              </label>
-
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                Style
-                <select
-                  className="rounded border border-white/10 bg-slate-900 px-2 py-1 text-sm"
-                  value={imageStyle}
-                  onChange={(e) => setImageStyle(e.target.value as 'natural' | 'vivid')}
-                  disabled={!generateImages || imageModel !== 'dall-e-3'}
-                >
-                  <option value="natural">natural</option>
-                  <option value="vivid">vivid</option>
-                </select>
-              </label>
-
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                Quality
-                <select
-                  className="rounded border border-white/10 bg-slate-900 px-2 py-1 text-sm"
-                  value={imageQuality}
-                  onChange={(e) => setImageQuality(e.target.value as 'standard' | 'hd')}
-                  disabled={!generateImages || imageModel !== 'dall-e-3'}
-                >
-                  <option value="standard">standard</option>
-                  <option value="hd">hd</option>
-                </select>
-              </label>
-            </div>
-            
-            {/* Progress Bar */}
-            {isProcessing && progress.total > 0 && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>Generating flashcards...</span>
-                  <span>{progress.completed} of {progress.total}</span>
+          {/* Settings Panel */}
+          {showSettings && (
+            <div className="mb-6 p-6 bg-gray-50 rounded-lg border border-gray-200 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Generate Images Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="images"
+                      checked={generateImages}
+                      onChange={(e) => setGenerateImages(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded"
+                    />
+                    <label htmlFor="images" className="text-sm text-gray-900">Generate images</label>
+                  </div>
+                  <div className="space-y-3 pl-7">
+                    <div>
+                      <label className={`text-sm mb-2 block ${!generateImages ? 'text-gray-400' : 'text-gray-600'}`}>Model</label>
+                      <select
+                        disabled={!generateImages}
+                        value={imageModel}
+                        onChange={(e) => setImageModel(e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                          generateImages
+                            ? 'bg-white border-gray-200 text-gray-900'
+                            : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <option value="dall-e-2">dall-e-2</option>
+                        <option value="dall-e-3">dall-e-3</option>
+                        <option value="gpt-image-1">gpt-image-1</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`text-sm mb-2 block ${!generateImages || imageModel === 'gpt-image-1' ? 'text-gray-400' : 'text-gray-600'}`}>Style</label>
+                      <select
+                        disabled={!generateImages || imageModel === 'gpt-image-1'}
+                        value={imageStyle}
+                        onChange={(e) => setImageStyle(e.target.value as 'natural' | 'vivid')}
+                        className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                          generateImages && imageModel !== 'gpt-image-1'
+                            ? 'bg-white border-gray-200 text-gray-900'
+                            : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <option value="vivid">vivid</option>
+                        <option value="natural">natural</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`text-sm mb-2 block ${!generateImages || imageModel === 'gpt-image-1' ? 'text-gray-400' : 'text-gray-600'}`}>Quality</label>
+                      <select
+                        disabled={!generateImages || imageModel === 'gpt-image-1'}
+                        value={imageQuality}
+                        onChange={(e) => setImageQuality(e.target.value as 'standard' | 'hd')}
+                        className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                          generateImages && imageModel !== 'gpt-image-1'
+                            ? 'bg-white border-gray-200 text-gray-900'
+                            : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <option value="standard">standard</option>
+                        <option value="hd">hd</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
-                <Progress value={(progress.completed / progress.total) * 100} />
+
+                {/* Generate Pronunciation Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="audio"
+                      checked={generateAudio}
+                      onChange={(e) => setGenerateAudio(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded"
+                    />
+                    <label htmlFor="audio" className="text-sm text-gray-900">Generate pronunciation</label>
+                  </div>
+                  <div className="pl-7">
+                    <label className={`text-sm mb-2 block ${!generateAudio ? 'text-gray-400' : 'text-gray-600'}`}>Voice</label>
+                    <select
+                      disabled={!generateAudio}
+                      value={voice}
+                      onChange={(e) => setVoice(e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                        generateAudio
+                          ? 'bg-white border-gray-200 text-gray-900'
+                          : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      <option value="alloy">alloy</option>
+                      <option value="aria">aria</option>
+                      <option value="verse">verse</option>
+                      <option value="coral">coral</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-            )}
-          </CardContent>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3">
+            <Button
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 gap-2 transition-colors"
+              onClick={processWords}
+              disabled={!wordList.trim() || isProcessing}
+            >
+              <Sparkles className="w-4 h-4" />
+              {isProcessing ? 'Generating...' : 'Generate Flashcards'}
+            </Button>
+            <div className="relative inline-block">
+              <input
+                type="file"
+                accept=".txt,.csv"
+                onChange={handleFileUpload}
+                className="absolute inset-0 w-full h-full cursor-pointer opacity-0 z-10"
+              />
+              <Button variant="outline" className="gap-2 relative z-0">
+                <Upload className="w-4 h-4" />
+                Upload File
+              </Button>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          {isProcessing && progress.total > 0 && (
+            <div className="space-y-2 mt-6">
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Generating flashcards...</span>
+                <span>{progress.completed} of {progress.total}</span>
+              </div>
+              <Progress value={(progress.completed / progress.total) * 100} />
+            </div>
+          )}
         </Card>
         
-        {/* Results Section */}
+        {/* Flashcard Previews */}
         {flashcards.length > 0 && (
-          <Card className="border-purple-500/20 bg-gradient-to-br from-white/10 to-white/5 shadow-2xl backdrop-blur-xl">
-            <CardHeader className="border-b border-white/10 pb-6">
-              <CardTitle className="text-3xl font-bold text-white flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-400/30">
-                  <Sparkles className="h-6 w-6 text-emerald-200" />
-                </div>
-                Generated Flashcards
-              </CardTitle>
-              <CardDescription className="text-slate-300 text-base">
-                {flashcards.length} flashcard{flashcards.length !== 1 ? 's' : ''} ready for export
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 pt-6">
-              {/* Preview of generated cards */}
-              <div className="space-y-8 pr-1">
-                {flashcards.map((card, index) => {
-                  const word = card.word.charAt(0).toUpperCase() + card.word.slice(1)
-                  const frontAudio = card.audioUrl
-                  const examples = Array.isArray(card.examples)
-                    ? card.examples.filter(Boolean)
-                    : typeof card.examples === 'string'
-                      ? [card.examples]
-                      : []
-                  const synonyms = Array.isArray(card.synonyms)
-                    ? card.synonyms.filter(Boolean)
-                    : typeof card.synonyms === 'string'
-                      ? [card.synonyms]
-                      : []
-                  return (
-                    <div key={index} className="rounded-2xl border border-purple-400/20 bg-gradient-to-br from-white/10 to-white/5 shadow-xl backdrop-blur-sm hover:shadow-2xl hover:border-purple-400/30 transition-all">
-                      <div className="grid gap-6 p-6 md:grid-cols-2">
-                        <div className="rounded-xl border border-purple-400/20 bg-gradient-to-br from-slate-900/90 to-slate-950/90 shadow-lg">
-                          <div className="px-4 py-3 border-b border-purple-400/20 bg-gradient-to-r from-purple-500/10 to-indigo-500/10">
-                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-purple-200">Front</span>
+          <div className="space-y-6 mb-8">
+            <div className="flex items-center justify-between">
+              <h3 className="text-2xl text-gray-900">Preview</h3>
+              {/* Export Buttons */}
+              <div className="flex gap-3">
+                <Button variant="outline" className="gap-2" onClick={exportToAnki}>
+                  <FileText className="w-4 h-4" />
+                  Export TSV
+                </Button>
+                <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 gap-2" onClick={exportToApkg}>
+                  <Package className="w-4 h-4" />
+                  Export .apkg
+                </Button>
+              </div>
+            </div>
+
+            {flashcards.map((card, index) => {
+              const word = card.word.charAt(0).toUpperCase() + card.word.slice(1)
+              const examples = Array.isArray(card.examples)
+                ? card.examples.filter(Boolean)
+                : typeof card.examples === 'string'
+                  ? [card.examples]
+                  : []
+              const synonyms = Array.isArray(card.synonyms)
+                ? card.synonyms.filter(Boolean)
+                : typeof card.synonyms === 'string'
+                  ? [card.synonyms]
+                  : []
+
+              return (
+                <div key={index} className="space-y-4">
+                  {/* Front of Card */}
+                  <Card className="p-6 shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+                    <div className="px-3 py-1 bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 rounded-full text-sm inline-block mb-4">
+                      FRONT
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-3xl text-gray-900">{word}</h3>
+                      {card.audioUrl && (
+                        <button className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 rounded-full flex items-center justify-center transition-all hover:scale-105">
+                          <Volume2 className="w-5 h-5 text-white" />
+                        </button>
+                      )}
+                    </div>
+                  </Card>
+
+                  {/* Back of Card */}
+                  <Card className="p-8 shadow-lg border-0 bg-white/90 backdrop-blur-sm overflow-hidden">
+                    <div className="px-3 py-1 bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 rounded-full text-sm inline-block mb-6">
+                      BACK
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Image */}
+                      {card.imageUrl && (
+                        <div className="rounded-2xl overflow-hidden shadow-lg">
+                          <img
+                            src={card.imageUrl}
+                            alt={word}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                      )}
+
+                      {/* Content */}
+                      <div className="space-y-6">
+                        {/* Definition */}
+                        {card.definition && (
+                          <div>
+                            <p className="text-gray-800">
+                              <span className="font-semibold">{word}</span> {card.definition}
+                            </p>
                           </div>
-                          <div className="p-5 space-y-4">
-                            <div className="flex flex-wrap items-center gap-4">
-                              <h3 className="text-3xl font-bold tracking-tight text-white">{word}</h3>
-                              {frontAudio && (
-                                <audio
-                                  controls
-                                  preload="metadata"
-                                  controlsList="nodownload"
-                                  src={frontAudio}
-                                  className="h-10 max-w-[180px]"
-                                />
-                              )}
+                        )}
+
+                        {/* Examples */}
+                        {examples.length > 0 && (
+                          <div>
+                            <h4 className="text-sm text-gray-500 mb-3">Examples</h4>
+                            <ul className="space-y-2">
+                              {examples.map((example, i) => (
+                                <li key={i} className="flex gap-2 text-sm text-gray-700">
+                                  <span className="text-indigo-500 flex-shrink-0">•</span>
+                                  <span>{example}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Synonyms */}
+                        {synonyms.length > 0 && (
+                          <div>
+                            <h4 className="text-sm text-gray-500 mb-3">Synonyms</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {synonyms.map((synonym, i) => (
+                                <span
+                                  key={i}
+                                  className="px-3 py-1 bg-gradient-to-r from-gray-100 to-gray-50 text-gray-700 rounded-full text-sm border border-gray-200"
+                                >
+                                  {synonym.trim()}
+                                </span>
+                              ))}
                             </div>
                           </div>
-                        </div>
-
-                        <div className="rounded-xl border border-purple-400/20 bg-gradient-to-br from-slate-900/90 to-slate-950/90 shadow-lg">
-                          <div className="px-4 py-3 border-b border-purple-400/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10">
-                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-200">Back</span>
-                          </div>
-                          <div className="p-5 space-y-4">
-                            {generateImages && (
-                              imageStatus[index] === 'pending' ? (
-                                <div className="grid aspect-video w-full place-items-center rounded-lg border border-white/10 bg-white/5 text-center text-xs text-slate-300 animate-pulse">
-                                  Generating illustration…
-                                </div>
-                              ) : imageStatus[index] === 'failed' ? (
-                                <div className="rounded-lg border border-dashed border-red-400/30 bg-red-400/10 p-4 text-center text-xs text-red-200">
-                                  {imageErrors[index] || 'Illustration unavailable'}
-                                </div>
-                              ) : card.imageUrl ? (
-                                <div
-                                  className="w-full max-w-sm"
-                                  style={{ maxWidth: '440px', marginTop: '1.5rem' }}
-                                >
-                                  <div
-                                    className="overflow-hidden rounded-lg border border-white/10 bg-white/10 shadow-sm"
-                                    style={{ height: '300px' }}
-                                  >
-                                    <img
-                                      src={card.imageUrl}
-                                      alt={`${card.word} illustration`}
-                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                      loading="lazy"
-                                    />
-                                  </div>
-                                </div>
-                              ) : null
-                            )}
-
-                            {card.definition && (
-                              <p className="text-base leading-relaxed text-slate-100">{card.definition}</p>
-                            )}
-
-                            {examples.length > 0 && (
-                              <div className="space-y-2">
-                                <p className="text-sm font-semibold text-slate-100">Examples</p>
-                                <ul className="space-y-2 text-sm text-slate-300">
-                                  {examples.map((example, i) => (
-                                    <li key={i} className="rounded-md border-l-4 border-primary/60 bg-white/5 px-3 py-2">
-                                      {example}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {synonyms.length > 0 && (
-                              <div className="space-y-2">
-                                <p className="text-sm font-semibold text-slate-100">Synonyms</p>
-                                <p className="text-sm text-slate-300">{synonyms.join(', ')}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        )}
                       </div>
                     </div>
-                  )
-                })}
-              </div>
-              
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2">
-                <Button onClick={exportToAnki} variant="ghost" className="h-14 rounded-xl border-2 border-purple-400/30 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 hover:from-purple-500/20 hover:to-indigo-500/20 text-slate-100 font-semibold shadow-xl hover:shadow-2xl transition-all">
-                  <Download className="h-5 w-5 mr-2" />
-                  Export TSV + media (.zip)
-                </Button>
-                <Button onClick={exportToApkg} variant="ghost" className="h-14 rounded-xl border-2 border-purple-400/30 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 hover:from-purple-500/20 hover:to-indigo-500/20 text-slate-100 font-semibold shadow-xl hover:shadow-2xl transition-all">
-                  <Download className="h-5 w-5 mr-2" />
-                  Export Anki package (.apkg)
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                  </Card>
+                </div>
+              )
+            })}
+          </div>
         )}
         
-        {/* Features Info */}
-        <Card className="border-purple-500/20 bg-gradient-to-br from-white/10 to-white/5 shadow-2xl backdrop-blur-xl">
-          <CardHeader className="border-b border-white/10 pb-6">
-            <CardTitle className="text-3xl font-bold text-white">What&apos;s Included</CardTitle>
-            <CardDescription className="text-slate-300 text-base">
-              Every output mirrors the way cards render inside Anki—no extra tweaking required.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <ul className="grid gap-4 text-base text-slate-200 sm:grid-cols-2">
-              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
-                <span className="text-2xl">🎯</span>
-                <span className="leading-relaxed">Kid-friendly language crafted for ISEE-level learners.</span>
-              </li>
-              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
-                <span className="text-2xl">📝</span>
-                <span className="leading-relaxed">Three context-rich example sentences per word.</span>
-              </li>
-              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
-                <span className="text-2xl">🔁</span>
-                <span className="leading-relaxed">Synonym chips for quick mental associations.</span>
-              </li>
-              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
-                <span className="text-2xl">🖼️</span>
-                <span className="leading-relaxed">Image-first backs that match Anki&apos;s media layout.</span>
-              </li>
-              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
-                <span className="text-2xl">🔊</span>
-                <span className="leading-relaxed">Pronunciation clips attached to the front of each card.</span>
-              </li>
-              <li className="flex items-start gap-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-indigo-500/10 p-4 shadow-lg hover:shadow-xl transition-all">
-                <span className="text-2xl">📦</span>
-                <span className="leading-relaxed">Export as TSV or .apkg and drop straight into existing decks.</span>
-              </li>
-            </ul>
-          </CardContent>
+        {/* What's Included */}
+        <Card className="p-8 mb-8 shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+          <h3 className="text-lg mb-4 text-gray-900">What's Included</h3>
+          <p className="text-sm text-gray-600 mb-6">
+            Every output mirrors the way cards render inside Anki—no extra tweaking required.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-rose-500 to-orange-500 rounded-lg flex items-center justify-center flex-shrink-0 text-xl">
+                🎯
+              </div>
+              <div>
+                <p className="text-sm text-gray-900">Kid-friendly language crafted for ISEE-level learners.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-yellow-500 rounded-lg flex items-center justify-center flex-shrink-0 text-xl">
+                📝
+              </div>
+              <div>
+                <p className="text-sm text-gray-900">Three context-rich example sentences per word.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0 text-xl">
+                🖼️
+              </div>
+              <div>
+                <p className="text-sm text-gray-900">Synonym chips for quick mental associations.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center flex-shrink-0 text-xl">
+                🎨
+              </div>
+              <div>
+                <p className="text-sm text-gray-900">Image-first backs that match Anki's media layout.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0 text-xl">
+                🔊
+              </div>
+              <div>
+                <p className="text-sm text-gray-900">Pronunciation clips attached to the front of each card.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-violet-500 rounded-lg flex items-center justify-center flex-shrink-0 text-xl">
+                📦
+              </div>
+              <div>
+                <p className="text-sm text-gray-900">Export as TSV or .apkg and drop straight into existing decks.</p>
+              </div>
+            </div>
+          </div>
         </Card>
       </div>
       
