@@ -411,9 +411,11 @@ function App() {
                       }`}
                     >
                       <option value="alloy">alloy</option>
-                      <option value="aria">aria</option>
-                      <option value="verse">verse</option>
-                      <option value="coral">coral</option>
+                      <option value="echo">echo</option>
+                      <option value="fable">fable</option>
+                      <option value="onyx">onyx</option>
+                      <option value="nova">nova</option>
+                      <option value="shimmer">shimmer</option>
                     </select>
                   </div>
                 </div>
