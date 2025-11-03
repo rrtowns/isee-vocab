@@ -5,6 +5,7 @@ interface FlashcardPreviewProps {
   word: string
   definition?: string
   imageUrl?: string
+  audioUrl?: string
   examples?: string[]
   synonyms?: string[]
   audioAvailable?: boolean
@@ -14,10 +15,17 @@ export function FlashcardPreview({
   word,
   definition,
   imageUrl,
+  audioUrl,
   examples = [],
   synonyms = [],
   audioAvailable,
 }: FlashcardPreviewProps) {
+  const playAudio = () => {
+    if (audioUrl) {
+      const audio = new Audio(audioUrl)
+      audio.play().catch(err => console.error('Error playing audio:', err))
+    }
+  }
   return (
     <div className="space-y-4">
       <Card className="p-6 shadow-lg border-0 bg-white/90 backdrop-blur-sm">
@@ -29,6 +37,7 @@ export function FlashcardPreview({
           {audioAvailable && (
             <button
               type="button"
+              onClick={playAudio}
               aria-label={`Play pronunciation for ${word}`}
               className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 rounded-full flex items-center justify-center transition-all hover:scale-105"
             >

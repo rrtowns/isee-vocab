@@ -3,10 +3,48 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Upload, Sparkles, Download, Settings, ChevronDown, FileText, Package, Key, Volume2 } from 'lucide-react'
+import { Upload, Sparkles, Settings, ChevronDown, FileText, Package } from 'lucide-react'
 import { ApiKeyModal } from '@/components/ApiKeyModal'
+import { FlashcardPreview } from '@/components/FlashcardPreview'
 import { generateFlashcardsBatch, type FlashcardContent, createImagePrompt, generateImageFromPrompt, verifyOpenAIKey } from '@/services/openai'
 import { buildAnkiTSV, downloadText, exportAnkiZip, exportAnkiApkg } from '@/utils/ankiExport'
+
+type PreviewCard = {
+  word: string
+  definition?: string
+  examples?: string[]
+  synonyms?: string[]
+  imageUrl?: string
+  audioUrl?: string
+  audioAvailable?: boolean
+}
+
+const MOCK_FLASHCARDS: PreviewCard[] = [
+  {
+    word: 'Acumen',
+    definition: 'means having the ability to make good decisions and understand things quickly.',
+    examples: [
+      'Her acumen in math helped her solve the problems faster than anyone else.',
+      'The business owner showed great acumen by knowing exactly what customers wanted.',
+      'His acumen for sports made him a star player on the team.',
+      'With her acumen in science, she easily understood the complex experiments.',
+    ],
+    synonyms: ['insight', 'sharpness', 'wisdom', 'cleverness', 'understanding'],
+    audioAvailable: true,
+  },
+  {
+    word: 'Alacrity',
+    definition: 'means being eager and ready to do something quickly.',
+    examples: [
+      'She accepted the invitation with alacrity, excited to attend the party.',
+      'The children completed their assignments with alacrity, wanting to impress their teacher.',
+      'He jumped up with alacrity when he heard his name called for the prize.',
+      'The puppy wagged its tail with alacrity as soon as he saw his owner coming home.',
+    ],
+    synonyms: ['eagerness', 'willingness', 'readiness', 'enthusiasm', 'zeal'],
+    audioAvailable: true,
+  },
+]
 
 function App() {
   const [wordList, setWordList] = useState<string>('')
@@ -16,12 +54,12 @@ function App() {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false)
   const [apiKey, setApiKey] = useState<string>('')
   const [generateImages, setGenerateImages] = useState<boolean>(true)
-  const [imageSize, setImageSize] = useState<string>('1024x1024')
+  const [imageSize] = useState<string>('1024x1024')
   const [imageModel, setImageModel] = useState<string>('dall-e-3')
   const [imageStyle, setImageStyle] = useState<'natural' | 'vivid'>('vivid')
   const [imageQuality, setImageQuality] = useState<'standard' | 'hd'>('hd')
-  const [imageStatus, setImageStatus] = useState<Record<number, 'pending' | 'success' | 'failed'>>({})
-  const [imageErrors, setImageErrors] = useState<Record<number, string>>({})
+  const [_imageStatus, setImageStatus] = useState<Record<number, 'pending' | 'success' | 'failed'>>({})
+  const [_imageErrors, setImageErrors] = useState<Record<number, string>>({})
   const DEBUG_IMAGES: boolean = (import.meta.env.VITE_DEBUG_IMAGES as any) !== 'false'
   const [generateAudio, setGenerateAudio] = useState<boolean>(true)
   const [voice, setVoice] = useState<string>((import.meta.env.VITE_OPENAI_VOICE as any) || 'alloy')
@@ -190,6 +228,30 @@ function App() {
     import.meta.env.VITE_OPENAI_API_KEY = newApiKey
   }
 
+  const hasGeneratedCards = flashcards.length > 0
+
+  const previewCards: PreviewCard[] = hasGeneratedCards
+    ? flashcards.map((card) => ({
+        word: card.word
+          ? card.word.charAt(0).toUpperCase() + card.word.slice(1)
+          : '',
+        definition: card.definition,
+        imageUrl: card.imageUrl,
+        audioUrl: card.audioUrl,
+        examples: Array.isArray(card.examples)
+          ? card.examples.filter(Boolean)
+          : typeof card.examples === 'string'
+            ? [card.examples]
+            : [],
+        synonyms: Array.isArray(card.synonyms)
+          ? card.synonyms.filter(Boolean)
+          : typeof card.synonyms === 'string'
+            ? [card.synonyms]
+            : [],
+        audioAvailable: Boolean(card.audioUrl),
+      }))
+    : MOCK_FLASHCARDS
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
       {/* Header */}
@@ -229,7 +291,7 @@ function App() {
         </div>
 
         {/* Main Input Card */}
-        <Card className="p-8 mb-8 shadow-lg border-0 bg-purple-50/50 backdrop-blur-sm">
+        <Card className="p-8 mb-8 shadow-lg border-0 bg-white/90 backdrop-blur-sm">
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -250,7 +312,7 @@ function App() {
             <Textarea
               value={wordList}
               onChange={(e) => setWordList(e.target.value)}
-              placeholder="Enter words here, one per line...&#10;&#10;Example:&#10;aberrant&#10;abstruse&#10;acumen&#10;alacrity"
+              placeholder={'Enter words here, one per line...\n\nExample:\naberrant\nabstruse\nacumen\nalacrity'}
               className="min-h-[200px] font-mono text-sm resize-none border-gray-200 focus:border-indigo-300 focus:ring-indigo-200 placeholder:text-gray-400"
             />
           </div>
@@ -362,7 +424,7 @@ function App() {
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-3">
             <Button
-              className="bg-purple-600 hover:bg-purple-700 text-white gap-2 transition-colors"
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white gap-2 transition-colors disabled:from-indigo-200 disabled:to-purple-200 disabled:text-white/80"
               onClick={processWords}
               disabled={!wordList.trim() || isProcessing}
             >
@@ -394,127 +456,9 @@ function App() {
             </div>
           )}
         </Card>
-        
-        {/* Flashcard Previews */}
-        {flashcards.length > 0 && (
-          <div className="space-y-6 mb-8">
-            <div className="flex items-center justify-between">
-              <h3 className="text-2xl text-gray-900">Preview</h3>
-              {/* Export Buttons */}
-              <div className="flex gap-3">
-                <Button variant="outline" className="gap-2" onClick={exportToAnki}>
-                  <FileText className="w-4 h-4" />
-                  Export TSV
-                </Button>
-                <Button className="bg-purple-600 hover:bg-purple-700 text-white gap-2" onClick={exportToApkg}>
-                  <Package className="w-4 h-4" />
-                  Export .apkg
-                </Button>
-              </div>
-            </div>
 
-            {flashcards.map((card, index) => {
-              const word = card.word.charAt(0).toUpperCase() + card.word.slice(1)
-              const examples = Array.isArray(card.examples)
-                ? card.examples.filter(Boolean)
-                : typeof card.examples === 'string'
-                  ? [card.examples]
-                  : []
-              const synonyms = Array.isArray(card.synonyms)
-                ? card.synonyms.filter(Boolean)
-                : typeof card.synonyms === 'string'
-                  ? [card.synonyms]
-                  : []
-
-              return (
-                <div key={index} className="space-y-4">
-                  {/* Front of Card */}
-                  <Card className="p-6 shadow-lg border-0 bg-purple-50/80 backdrop-blur-sm">
-                    <div className="px-4 py-2 bg-purple-100 text-purple-700 text-sm font-medium mb-4 inline-block">
-                      FRONT
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-3xl text-gray-900">{word}</h3>
-                      {card.audioUrl && (
-                        <button className="w-10 h-10 bg-purple-600 hover:bg-purple-700 rounded-full flex items-center justify-center transition-colors">
-                          <Volume2 className="w-5 h-5 text-white" />
-                        </button>
-                      )}
-                    </div>
-                  </Card>
-
-                  {/* Back of Card */}
-                  <Card className="p-8 shadow-lg border-0 bg-purple-50/80 backdrop-blur-sm overflow-hidden">
-                    <div className="px-4 py-2 bg-purple-100 text-purple-700 text-sm font-medium mb-6 inline-block">
-                      BACK
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                      {/* Image */}
-                      {card.imageUrl && (
-                        <div className="rounded-2xl overflow-hidden shadow-lg">
-                          <img
-                            src={card.imageUrl}
-                            alt={word}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        </div>
-                      )}
-
-                      {/* Content */}
-                      <div className="space-y-6">
-                        {/* Definition */}
-                        {card.definition && (
-                          <div>
-                            <p className="text-gray-800">
-                              <span className="font-semibold">{word}</span> {card.definition}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Examples */}
-                        {examples.length > 0 && (
-                          <div>
-                            <h4 className="text-sm text-gray-500 mb-3">Examples</h4>
-                            <ul className="space-y-2">
-                              {examples.map((example, i) => (
-                                <li key={i} className="flex gap-2 text-sm text-gray-700">
-                                  <span className="text-indigo-500 flex-shrink-0">•</span>
-                                  <span>{example}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {/* Synonyms */}
-                        {synonyms.length > 0 && (
-                          <div>
-                            <h4 className="text-sm text-gray-500 mb-3">Synonyms</h4>
-                            <div className="flex flex-wrap gap-2">
-                              {synonyms.map((synonym, i) => (
-                                <span
-                                  key={i}
-                                  className="px-3 py-1 bg-purple-100 text-purple-700 rounded text-sm"
-                                >
-                                  {synonym.trim()}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-              )
-            })}
-          </div>
-        )}
-        
         {/* What's Included */}
-        <Card className="p-8 mb-8 shadow-lg border-0 bg-purple-50/50 backdrop-blur-sm">
+        <Card className="p-8 mb-12 shadow-lg border-0 bg-white/90 backdrop-blur-sm">
           <h3 className="text-lg mb-4 text-gray-900">What's Included</h3>
           <p className="text-sm text-gray-600 mb-6">
             Every output mirrors the way cards render inside Anki—no extra tweaking required.
@@ -549,7 +493,7 @@ function App() {
                 🎨
               </div>
               <div>
-                <p className="text-sm text-gray-900">Image-first backs that match Anki's media layout.</p>
+                <p className="text-sm text-gray-900">Image-first backs that match Anki&apos;s media layout.</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -570,6 +514,51 @@ function App() {
             </div>
           </div>
         </Card>
+        
+        {/* Preview */}
+        <section className="space-y-6 mb-16">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h3 className="text-2xl text-gray-900">Preview</h3>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={exportToAnki}
+                disabled={!hasGeneratedCards}
+              >
+                <FileText className="w-4 h-4" />
+                Export TSV
+              </Button>
+              <Button
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white gap-2 disabled:from-indigo-200 disabled:to-purple-200 disabled:text-white/80"
+                onClick={exportToApkg}
+                disabled={!hasGeneratedCards}
+              >
+                <Package className="w-4 h-4" />
+                Export .apkg
+              </Button>
+            </div>
+          </div>
+
+          {previewCards.map((card, index) => (
+            <FlashcardPreview
+              key={`${card.word}-${index}`}
+              word={card.word}
+              definition={card.definition}
+              examples={card.examples}
+              synonyms={card.synonyms}
+              imageUrl={card.imageUrl}
+              audioUrl={card.audioUrl}
+              audioAvailable={card.audioAvailable}
+            />
+          ))}
+
+          {!hasGeneratedCards && (
+            <p className="text-sm text-gray-500">
+              Generate flashcards to replace this sample preview with your own content.
+            </p>
+          )}
+        </section>
       </div>
       
       {/* API Key Modal */}
