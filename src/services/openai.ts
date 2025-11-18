@@ -70,12 +70,14 @@ interface VisualBrief {
 /**
  * Generate flashcard content for a single word using OpenAI
  */
-export async function generateFlashcardContent(word: string, apiKey?: string): Promise<FlashcardContent> {
-  const prompt = `Create educational content for the word "${word}" suitable for a 10-year-old student preparing for the ISEE exam.
+export async function generateFlashcardContent(word: string, apiKey?: string, extraKidFriendly?: boolean): Promise<FlashcardContent> {
+  const ageLevel = extraKidFriendly ? 'a 10-year-old' : 'a 10-year-old student preparing for the ISEE exam';
+  const simplificationNote = extraKidFriendly ? '\n\nIMPORTANT: Make the definition EXTRA kid-friendly and conversational:\n- Use 2-3 sentences to explain the word in everyday language\n- Include relatable comparisons using "It\'s like when..." or similar phrases\n- Use very simple vocabulary that any 10-year-old would understand\n- Make it feel like a friendly explanation, not a dictionary definition\n- Examples should be about everyday situations kids experience (school, home, friends, etc.)\n\nExample format for "retribution": "Retribution means getting punished or facing consequences for doing something wrong. It\'s like when someone gets in trouble because they did something bad, and now they have to pay the price for it."' : '';
+  const prompt = `Create educational content for the word "${word}" suitable for ${ageLevel}.${simplificationNote}
 
 Please provide:
 1. A simple, clear definition (1–2 sentences, age-appropriate)
-2. Four short, natural example sentences using the word in different contexts
+2. Three short, natural example sentences using the word in different contexts
 3. 6–10 synonyms or short phrases (no duplicates)
 4. Difficulty level (easy, medium, or hard)
 
@@ -85,8 +87,7 @@ Return JSON ONLY with this exact structure:
   "examples": [
     "Example sentence 1.",
     "Example sentence 2.",
-    "Example sentence 3.",
-    "Example sentence 4."
+    "Example sentence 3."
   ],
   "synonyms": ["synonym1", "synonym2", "synonym3", "synonym4", "synonym5"],
   "difficulty": "medium"
@@ -156,7 +157,7 @@ Return JSON ONLY with this exact structure:
  * Generate flashcard content for multiple words in batch
  */
 export async function generateFlashcardsBatch(
-  words: string[], 
+  words: string[],
   onProgress?: (completed: number, total: number) => void,
   apiKey?: string,
   opts?: {
@@ -165,6 +166,8 @@ export async function generateFlashcardsBatch(
     onImage?: (index: number, status: 'pending' | 'success' | 'failed', url?: string) => void;
     generateAudio?: boolean;
     voice?: string;
+    extraKidFriendly?: boolean;
+    onCardReady?: (card: FlashcardContent, index: number) => void;
   }
 ): Promise<FlashcardContent[]> {
   const results: FlashcardContent[] = [];
@@ -174,7 +177,7 @@ export async function generateFlashcardsBatch(
     
     try {
       if (IMG_DEBUG) console.log('[cards] generating text', { index: i, word });
-      const content = await generateFlashcardContent(word, apiKey);
+      const content = await generateFlashcardContent(word, apiKey, opts?.extraKidFriendly);
       // Optionally generate an image for the word using the definition as context
       if (opts?.generateImages) {
         try {
@@ -204,7 +207,12 @@ export async function generateFlashcardsBatch(
         }
       }
       results.push(content);
-      
+
+      // Call card ready callback
+      if (opts?.onCardReady) {
+        opts.onCardReady(content, i);
+      }
+
       // Call progress callback
       if (onProgress) {
         onProgress(i + 1, words.length);
